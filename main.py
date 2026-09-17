@@ -1,14 +1,49 @@
 print("Welcome to study buddy!")
 name = input("What is your name? ") 
 print("Hello, " + name + "! Let's get started with your study session.")
-subject = input("What subject would you like to study today? ")
-print("Great! Let's focus on " + subject + ".")
-days = int(input("How many days do you have left? "))
+subjects = []
+
+number_of_subjects = int(input("How many subjects do you have? "))
+
+for i in range(number_of_subjects):
+    subject = input("Enter subject: ")
+    subjects.append(subject)
+
+print("Your subjects are:")
+print(subjects)
+
+
+print("All subjects:")
+for subject in subjects:
+    print(subject)
+number_of_subjects = len(subjects)
+
+print("Number of subjects:", number_of_subjects)  
+priorities = []
+
+for subject in subjects:
+    priority = int(input("Rate " + subject + " priority (1-5): "))
+    priorities.append(priority)
+    total_priority = sum(priorities)
+
+
+print("Total priority:", total_priority)
+
+print("Subject priorities:")
+print(priorities)  
+days = int(input("How many days do you have left for exam? "))
 print("You have ", days, " days left to study ")
 hours = float(input("How many hours can you dedicate to studying each day? "))
 print("You can dedicate ", hours, " hours each day to studying.")
+
+
+print("Priority-based study plan:")
+
+for i in range(number_of_subjects):
+    subject_hours = (priorities[i] / total_priority) * hours
+    print(subjects[i], "->", round(subject_hours, 2), "hours")
 total_hours = days * hours
-print("In total, you have ", total_hours, " hours to study for " + subject + ".")
+print("In total, you have ", total_hours, " hours to study for " + ", ".join(subjects) + ".")
 if days <= 3:
     print("Your exam is very close. Let's study seriously!")
 else:
@@ -18,9 +53,9 @@ if hours >= 3:
 else:
     print("Let's focus on one short study session.")   
 sessions = 2
-sessions_hours = total_hours / sessions
+session_hours = hours / sessions
 print("Today's plan:-")
 print("Number of sessions:", sessions)
-print("Study each session for:", sessions_hours, "hours")  
-total_session_hours = sessions * sessions_hours
-print("Today plannened study time is:", total_session_hours, "hours") 
+print("Study each session for:", session_hours, "hours")  
+total_session_hours = sessions * session_hours
+print("Total planned study time is:", total_session_hours, "hours") 
