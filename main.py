@@ -63,4 +63,6 @@ for i in range(number_of_subjects):
     print(subjects[i], ":")
     print("  Session 1:", round(session_hours, 2), "hours")
     print("  Session 2:", round(session_hours, 2), "hours")
+    print("  Session 2:", round(session_hours, 3), "hours") 
+    
 
