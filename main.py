@@ -1,13 +1,19 @@
 print("Welcome to study buddy!")
 name = input("What is your name? ") 
 print("Hello, " + name + "! Let's get started with your study session.")
-subjects = []
+def get_subjects():
+    subjects = []
 
-number_of_subjects = int(input("How many subjects do you have? "))
+    number_of_subjects = int(input("How many subjects do you have? "))
 
-for i in range(number_of_subjects):
-    subject = input("Enter subject: ")
-    subjects.append(subject)
+    for i in range(number_of_subjects):
+        subject = input("Enter subject: ")
+        subjects.append(subject)
+
+    return subjects
+
+
+subjects = get_subjects()
 
 print("Your subjects are:")
 print(subjects)
@@ -19,12 +25,18 @@ for subject in subjects:
 number_of_subjects = len(subjects)
 
 print("Number of subjects:", number_of_subjects)  
-priorities = []
+def get_priorities(subjects):
+    priorities = []
 
-for subject in subjects:
-    priority = int(input("Rate " + subject + " priority (1-5): "))
-    priorities.append(priority)
-    total_priority = sum(priorities)
+    for subject in subjects:
+        priority = int(input("Rate " + subject + " priority (1-5): "))
+        priorities.append(priority)
+
+    return priorities
+
+
+priorities = get_priorities(subjects)
+total_priority = sum(priorities)
 
 
 print("Total priority:", total_priority)
@@ -39,9 +51,16 @@ print("You can dedicate ", hours, " hours each day to studying.")
 
 print("Priority-based study plan:")
 
-for i in range(number_of_subjects):
-    subject_hours = (priorities[i] / total_priority) * hours
-    print(subjects[i], "->", round(subject_hours, 2), "hours")
+def create_study_plan(subjects, priorities, hours):
+    total_priority = sum(priorities)
+
+    for i in range(len(subjects)):
+        subject_hours = (priorities[i] / total_priority) * hours
+        print(subjects[i], "->", round(subject_hours, 2), "hours")
+
+
+print("Priority-based study plan:")
+create_study_plan(subjects, priorities, hours)
 total_hours = days * hours
 print("In total, you have ", total_hours, " hours to study for " + ", ".join(subjects) + ".")
 if days <= 3:
@@ -63,6 +82,25 @@ for i in range(number_of_subjects):
     print(subjects[i], ":")
     print("  Session 1:", round(session_hours, 2), "hours")
     print("  Session 2:", round(session_hours, 2), "hours")
-    print("  Session 2:", round(session_hours, 3), "hours") 
-    
+with open("study_plan.txt", "w") as file:
+    file.write("SMART STUDY BUDDY\n")
+    file.write("=================\n")
+    file.write("Name: " + name + "\n")
+    file.write("Days remaining: " + str(days) + "\n")
+    file.write("Daily study hours: " + str(hours) + "\n\n")
+
+    file.write("STUDY PLAN\n")
+    file.write("----------\n")
+
+    for i in range(number_of_subjects):
+        subject_hours = (priorities[i] / total_priority) * hours
+        session_hours = subject_hours / sessions
+
+        file.write(subjects[i] + "\n")
+        file.write("Priority: " + str(priorities[i]) + "\n")
+        file.write("Total time: " + str(round(subject_hours, 2)) + " hours\n")
+        file.write("Session 1: " + str(round(session_hours, 2)) + " hours\n")
+        file.write("Session 2: " + str(round(session_hours, 2)) + " hours\n\n")
+
+print("Study plan saved successfully!")  
 
