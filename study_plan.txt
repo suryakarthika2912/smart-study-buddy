@@ -1,14 +1,32 @@
 SMART STUDY BUDDY
 =================
-Name: ss
-Days remaining: 5
-Daily study hours: 4.0
+Name: surya
+Days remaining: 6
+Daily study hours: 5.0
 
 STUDY PLAN
 ----------
-ed
+ee
 Priority: 4
-Total time: 4.0 hours
-Session 1: 2.0 hours
-Session 2: 2.0 hours
+Total time: 2.0 hours
+Session 1: 1.0 hours
+Session 2: 1.0 hours
+
+dd
+Priority: 3
+Total time: 1.5 hours
+Session 1: 0.75 hours
+Session 2: 0.75 hours
+
+ff
+Priority: 2
+Total time: 1.0 hours
+Session 1: 0.5 hours
+Session 2: 0.5 hours
+
+tt
+Priority: 1
+Total time: 0.5 hours
+Session 1: 0.25 hours
+Session 2: 0.25 hours
 
