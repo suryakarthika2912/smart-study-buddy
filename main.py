@@ -53,9 +53,14 @@ if hours >= 3:
 else:
     print("Let's focus on one short study session.")   
 sessions = 2
-session_hours = hours / sessions
-print("Today's plan:-")
-print("Number of sessions:", sessions)
-print("Study each session for:", session_hours, "hours")  
-total_session_hours = sessions * session_hours
-print("Total planned study time is:", total_session_hours, "hours") 
+
+print("Today's study sessions:")
+
+for i in range(number_of_subjects):
+    subject_hours = (priorities[i] / total_priority) * hours
+    session_hours = subject_hours / sessions
+
+    print(subjects[i], ":")
+    print("  Session 1:", round(session_hours, 2), "hours")
+    print("  Session 2:", round(session_hours, 2), "hours")
+
