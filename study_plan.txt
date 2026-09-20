@@ -1,20 +1,20 @@
 SMART STUDY BUDDY
 =================
 Name: surya
-Days remaining: 3
-Daily study hours: 4.0
+Days remaining: 6
+Daily study hours: 7.0
 
 STUDY PLAN
 ----------
-we
-Priority: 3
-Total time: 2.4 hours
-Session 1: 1.2 hours
-Session 2: 1.2 hours
+eng
+Priority: 4
+Total time: 4.0 hours
+Session 1: 2.0 hours
+Session 2: 2.0 hours
 
-s
-Priority: 2
-Total time: 1.6 hours
-Session 1: 0.8 hours
-Session 2: 0.8 hours
+tam
+Priority: 3
+Total time: 3.0 hours
+Session 1: 1.5 hours
+Session 2: 1.5 hours
 
