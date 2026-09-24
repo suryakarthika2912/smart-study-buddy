@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>Study Progress - Smart Study Buddy</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+
+<body>
+
+    <nav>
+
+        <a href="/">🏠 Dashboard</a>
+
+        <a href="/plans">📚 Study Plans</a>
+
+        <a href="/progress">📊 Progress</a>
+
+        <a href="/">🎯 Goals</a>
+
+        <a href="/">💡 Recommendations</a>
+
+    </nav>
+
+
+    <div class="container">
+
+        <h1>📊 Progress</h1>
+
+        <p>
+            Track your subject-wise study progress.
+        </p>
+
+
+        {% for subject in subjects %}
+
+        <div class="card">
+
+            <h2>
+
+                {{ subject[0] }}
+
+                <span style="float:right;">
+                    {{ "%.1f"|format(subject[3]) }}%
+                </span>
+
+            </h2>
+
+
+            <div style="
+                background:#e5e7eb;
+                height:16px;
+                border-radius:10px;
+                overflow:hidden;
+                margin:15px 0;
+            ">
+
+                <div style="
+                    width:{{ subject[3] }}%;
+                    height:100%;
+                    background:#4f46e5;
+                "></div>
+
+            </div>
+
+
+            <p>
+
+                {{ "%.2f"|format(subject[2]) }}
+
+                /
+
+                {{ "%.2f"|format(subject[1]) }}
+
+                hours completed
+
+            </p>
+
+
+            <form
+                action="/add-progress"
+                method="POST"
+            >
+
+                <input
+                    type="hidden"
+                    name="subject"
+                    value="{{ subject[0] }}"
+                >
+
+                <label>
+                    Add Completed Hours:
+                </label>
+
+                <input
+                    type="number"
+                    name="completed_hours"
+                    min="0.5"
+                    step="0.5"
+                    placeholder="Example: 2"
+                    required
+                >
+
+                <button type="submit">
+                    ➕ Add Progress
+                </button>
+
+            </form>
+
+        </div>
+
+        {% endfor %}
+
+
+        <!-- ================================= -->
+        <!-- PROGRESS HISTORY -->
+        <!-- ================================= -->
+
+        <div class="card">
+
+            <h1>🕒 Progress History</h1>
+
+            <p>
+                Your recent study progress entries.
+            </p>
+
+
+            {% if history %}
+
+                {% for item in history %}
+
+                    <div style="
+                        padding:15px;
+                        margin:10px 0;
+                        background:#f5f7fa;
+                        border-radius:10px;
+                    ">
+
+                        <strong>
+                            {{ item[0] }}
+                        </strong>
+
+                        —
+
+                        {{ item[1] }} hours
+
+                        <br>
+
+                        <small>
+                            🕒 {{ item[2] }}
+                        </small>
+
+                    </div>
+
+                {% endfor %}
+
+            {% else %}
+
+                <p>
+                    No progress history yet.
+                </p>
+
+            {% endif %}
+
+        </div>
+
+    </div>
+
+</body>
+
+</html>

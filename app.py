@@ -6,15 +6,40 @@ app = Flask(__name__)
 DATABASE = "study_buddy.db"
 
 
-# --------------------------------------------------
+# ==================================================
+# DATABASE SETUP
+# ==================================================
+
+def setup_database():
+
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    # Check study_progress columns
+    cursor.execute("PRAGMA table_info(study_progress)")
+
+    columns = [row[1] for row in cursor.fetchall()]
+
+    # Add date/time column if it does not exist
+    if "added_at" not in columns:
+
+        cursor.execute("""
+            ALTER TABLE study_progress
+            ADD COLUMN added_at TEXT
+        """)
+
+    conn.commit()
+    conn.close()
+
+
+# ==================================================
 # DASHBOARD DATA
-# --------------------------------------------------
+# ==================================================
 
 def get_dashboard_data():
 
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
-
 
     # --------------------------------------------------
     # TOTAL SUBJECTS
@@ -29,7 +54,7 @@ def get_dashboard_data():
 
 
     # --------------------------------------------------
-    # PLANNED STUDY HOURS
+    # PLANNED HOURS
     # --------------------------------------------------
 
     cursor.execute("""
@@ -41,7 +66,7 @@ def get_dashboard_data():
 
 
     # --------------------------------------------------
-    # COMPLETED STUDY HOURS
+    # COMPLETED HOURS
     # --------------------------------------------------
 
     cursor.execute("""
@@ -99,10 +124,8 @@ def get_dashboard_data():
 
 
     # --------------------------------------------------
-    # SUBJECT PROGRESS
+    # SUBJECT PLAN DATA
     # --------------------------------------------------
-
-    # Get planned hours from study plans
 
     cursor.execute("""
         SELECT
@@ -115,7 +138,9 @@ def get_dashboard_data():
     plan_rows = cursor.fetchall()
 
 
-    # Get completed hours from study progress
+    # --------------------------------------------------
+    # SUBJECT PROGRESS DATA
+    # --------------------------------------------------
 
     cursor.execute("""
         SELECT
@@ -128,8 +153,6 @@ def get_dashboard_data():
     progress_rows = cursor.fetchall()
 
 
-    # Store completed hours by subject
-
     progress_data = {}
 
     for subject, completed in progress_rows:
@@ -137,14 +160,15 @@ def get_dashboard_data():
         progress_data[subject] = completed
 
 
-    # Create subject list
-
     subjects = []
 
 
     for subject, planned in plan_rows:
 
-        completed = progress_data.get(subject, 0)
+        completed = progress_data.get(
+            subject,
+            0
+        )
 
 
         if planned > 0:
@@ -177,7 +201,7 @@ def get_dashboard_data():
 
 
     # --------------------------------------------------
-    # STUDY GOALS
+    # GOALS
     # --------------------------------------------------
 
     cursor.execute("""
@@ -233,7 +257,7 @@ def get_dashboard_data():
 
 
     # --------------------------------------------------
-    # HIGHEST PRIORITY SUBJECT
+    # RECOMMENDATION
     # --------------------------------------------------
 
     cursor.execute("""
@@ -259,16 +283,8 @@ def get_dashboard_data():
         recommendation_priority = 0
 
 
-    # --------------------------------------------------
-    # CLOSE DATABASE
-    # --------------------------------------------------
-
     conn.close()
 
-
-    # --------------------------------------------------
-    # RETURN DASHBOARD DATA
-    # --------------------------------------------------
 
     return {
 
@@ -297,9 +313,9 @@ def get_dashboard_data():
     }
 
 
-# --------------------------------------------------
-# HOME PAGE
-# --------------------------------------------------
+# ==================================================
+# HOME / DASHBOARD
+# ==================================================
 
 @app.route("/")
 def home():
@@ -312,11 +328,14 @@ def home():
     )
 
 
-# --------------------------------------------------
+# ==================================================
 # ADD STUDY PLAN
-# --------------------------------------------------
+# ==================================================
 
-@app.route("/add-plan", methods=["POST"])
+@app.route(
+    "/add-plan",
+    methods=["POST"]
+)
 def add_plan():
 
     subject = request.form["subject"]
@@ -335,7 +354,6 @@ def add_plan():
 
 
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
 
@@ -344,22 +362,15 @@ def add_plan():
         (name, subject, priority, days, daily_hours)
         VALUES (?, ?, ?, ?, ?)
     """, (
-
         "Web Study Plan",
-
         subject,
-
         priority,
-
         days,
-
         daily_hours
-
     ))
 
 
     conn.commit()
-
     conn.close()
 
 
@@ -368,15 +379,14 @@ def add_plan():
     )
 
 
-# --------------------------------------------------
+# ==================================================
 # STUDY PLANS PAGE
-# --------------------------------------------------
+# ==================================================
 
 @app.route("/plans")
 def study_plans():
 
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
 
@@ -394,28 +404,247 @@ def study_plans():
 
     plans = cursor.fetchall()
 
+    conn.close()
+
+
+    return render_template(
+        "plans.html",
+        plans=plans
+    )
+
+
+# ==================================================
+# PROGRESS PAGE
+# ==================================================
+
+@app.route("/progress")
+def progress():
+
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+
+    # --------------------------------------------------
+    # PLANNED HOURS
+    # --------------------------------------------------
+
+    cursor.execute("""
+        SELECT
+            subject,
+            SUM(days * daily_hours)
+        FROM study_plans
+        GROUP BY subject
+    """)
+
+
+    plan_rows = cursor.fetchall()
+
+
+    # --------------------------------------------------
+    # COMPLETED HOURS
+    # --------------------------------------------------
+
+    cursor.execute("""
+        SELECT
+            subject,
+            SUM(completed_hours)
+        FROM study_progress
+        GROUP BY subject
+    """)
+
+
+    progress_rows = cursor.fetchall()
+
+
+    progress_data = {}
+
+
+    for subject, completed in progress_rows:
+
+        progress_data[subject] = completed
+
+
+    subjects = []
+
+
+    for subject, planned in plan_rows:
+
+        completed = progress_data.get(
+            subject,
+            0
+        )
+
+
+        if planned > 0:
+
+            percentage = (
+                completed / planned
+            ) * 100
+
+        else:
+
+            percentage = 0
+
+
+        if percentage > 100:
+
+            percentage = 100
+
+
+        subjects.append((
+            subject,
+            planned,
+            completed,
+            percentage
+        ))
+
+
+    # --------------------------------------------------
+    # PROGRESS HISTORY
+    # --------------------------------------------------
+
+    cursor.execute("""
+        SELECT
+            subject,
+            completed_hours,
+            added_at
+        FROM study_progress
+        WHERE added_at IS NOT NULL
+        ORDER BY id DESC
+    """)
+
+
+    history = cursor.fetchall()
+
 
     conn.close()
 
 
     return render_template(
-
-        "plans.html",
-
-        plans=plans
-
+        "progress.html",
+        subjects=subjects,
+        history=history
     )
 
 
-# --------------------------------------------------
-# DELETE STUDY PLAN
-# --------------------------------------------------
+# ==================================================
+# ADD PROGRESS
+# ==================================================
 
-@app.route("/delete-plan/<int:plan_id>")
+@app.route(
+    "/add-progress",
+    methods=["POST"]
+)
+def add_progress():
+
+    subject = request.form["subject"]
+
+
+    new_hours = float(
+        request.form["completed_hours"]
+    )
+
+
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+
+    # --------------------------------------------------
+    # GET PLANNED HOURS
+    # --------------------------------------------------
+
+    cursor.execute("""
+        SELECT SUM(days * daily_hours)
+        FROM study_plans
+        WHERE subject = ?
+    """, (subject,))
+
+
+    planned_hours = cursor.fetchone()[0] or 0
+
+
+    # --------------------------------------------------
+    # GET COMPLETED HOURS
+    # --------------------------------------------------
+
+    cursor.execute("""
+        SELECT SUM(completed_hours)
+        FROM study_progress
+        WHERE subject = ?
+    """, (subject,))
+
+
+    completed_hours = cursor.fetchone()[0] or 0
+
+
+    remaining_hours = (
+        planned_hours - completed_hours
+    )
+
+
+    # --------------------------------------------------
+    # PREVENT EXCEEDING PLANNED HOURS
+    # --------------------------------------------------
+
+    if new_hours > remaining_hours:
+
+        conn.close()
+
+
+        return render_template(
+            "progress_error.html",
+
+            subject=subject,
+
+            planned=planned_hours,
+
+            completed=completed_hours,
+
+            remaining=remaining_hours,
+
+            attempted=new_hours
+        )
+
+
+    # --------------------------------------------------
+    # SAVE PROGRESS
+    # --------------------------------------------------
+
+    cursor.execute("""
+        INSERT INTO study_progress
+        (
+            subject,
+            planned_hours,
+            completed_hours,
+            added_at
+        )
+        VALUES (?, ?, ?, datetime('now', 'localtime'))
+    """, (
+        subject,
+        planned_hours,
+        new_hours
+    ))
+
+
+    conn.commit()
+    conn.close()
+
+
+    return redirect(
+        url_for("progress")
+    )
+
+
+# ==================================================
+# DELETE STUDY PLAN
+# ==================================================
+
+@app.route(
+    "/delete-plan/<int:plan_id>"
+)
 def delete_plan(plan_id):
 
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
 
@@ -426,7 +655,6 @@ def delete_plan(plan_id):
 
 
     conn.commit()
-
     conn.close()
 
 
@@ -435,9 +663,9 @@ def delete_plan(plan_id):
     )
 
 
-# --------------------------------------------------
+# ==================================================
 # UPDATE STUDY PLAN
-# --------------------------------------------------
+# ==================================================
 
 @app.route(
     "/update-plan/<int:plan_id>",
@@ -446,11 +674,12 @@ def delete_plan(plan_id):
 def update_plan(plan_id):
 
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
 
-    # UPDATE DATA
+    # --------------------------------------------------
+    # UPDATE
+    # --------------------------------------------------
 
     if request.method == "POST":
 
@@ -475,20 +704,14 @@ def update_plan(plan_id):
                 daily_hours = ?
             WHERE id = ?
         """, (
-
             priority,
-
             days,
-
             daily_hours,
-
             plan_id
-
         ))
 
 
         conn.commit()
-
         conn.close()
 
 
@@ -497,7 +720,9 @@ def update_plan(plan_id):
         )
 
 
-    # GET EXISTING PLAN
+    # --------------------------------------------------
+    # GET PLAN
+    # --------------------------------------------------
 
     cursor.execute("""
         SELECT
@@ -518,18 +743,270 @@ def update_plan(plan_id):
 
 
     return render_template(
-
         "update_plan.html",
-
         plan=plan
-
     )
 
 
-# --------------------------------------------------
-# PROGRAM START
-# --------------------------------------------------
+# ==================================================
+# GOALS PAGE
+# ==================================================
+
+@app.route("/goals")
+def goals():
+
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+
+    cursor.execute("""
+        SELECT
+            goal,
+            target_hours,
+            completed_hours,
+            deadline,
+            status
+        FROM study_goals
+        ORDER BY id DESC
+    """)
+
+
+    goal_rows = cursor.fetchall()
+
+
+    goals = []
+
+
+    for goal, target, completed, deadline, status in goal_rows:
+
+        if target > 0:
+
+            progress = (
+                completed / target
+            ) * 100
+
+        else:
+
+            progress = 0
+
+
+        if progress > 100:
+
+            progress = 100
+
+
+        goals.append({
+
+            "goal": goal,
+
+            "target": target,
+
+            "completed": completed,
+
+            "deadline": deadline,
+
+            "status": status,
+
+            "progress": progress
+
+        })
+
+
+    conn.close()
+
+
+    return render_template(
+        "goals.html",
+        goals=goals
+    )
+
+
+# ==================================================
+# ADD GOAL
+# ==================================================
+
+@app.route(
+    "/add-goal",
+    methods=["POST"]
+)
+def add_goal():
+
+    goal = request.form["goal"]
+
+    target_hours = float(
+        request.form["target_hours"]
+    )
+
+    deadline = request.form["deadline"]
+
+
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+
+    cursor.execute("""
+        INSERT INTO study_goals
+        (
+            goal,
+            target_hours,
+            completed_hours,
+            deadline,
+            status
+        )
+        VALUES (?, ?, ?, ?, ?)
+    """, (
+        goal,
+        target_hours,
+        0,
+        deadline,
+        "Pending"
+    ))
+
+
+    conn.commit()
+    conn.close()
+
+
+    return redirect(
+        url_for("goals")
+    )
+    # ==================================================
+# ADD GOAL PROGRESS
+# ==================================================
+
+@app.route(
+    "/add-goal-progress",
+    methods=["POST"]
+)
+def add_goal_progress():
+
+    goal = request.form["goal"]
+
+    new_hours = float(
+        request.form["completed_hours"]
+    )
+
+
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+
+    # --------------------------------------------------
+    # GET CURRENT GOAL
+    # --------------------------------------------------
+
+    cursor.execute("""
+        SELECT
+            id,
+            target_hours,
+            completed_hours,
+            status
+        FROM study_goals
+        WHERE goal = ?
+        ORDER BY id DESC
+        LIMIT 1
+    """, (goal,))
+
+
+    result = cursor.fetchone()
+
+
+    if result is None:
+
+        conn.close()
+
+        return redirect(
+            url_for("goals")
+        )
+
+
+    goal_id = result[0]
+
+    target_hours = result[1]
+
+    completed_hours = result[2]
+
+    status = result[3]
+
+
+    # --------------------------------------------------
+    # CALCULATE REMAINING HOURS
+    # --------------------------------------------------
+
+    remaining_hours = (
+        target_hours - completed_hours
+    )
+
+
+    # --------------------------------------------------
+    # PREVENT EXCEEDING TARGET
+    # --------------------------------------------------
+
+    if new_hours > remaining_hours:
+
+        conn.close()
+
+        return redirect(
+            url_for("goals")
+        )
+
+
+    # --------------------------------------------------
+    # UPDATE COMPLETED HOURS
+    # --------------------------------------------------
+
+    new_completed_hours = (
+        completed_hours + new_hours
+    )
+
+
+    # --------------------------------------------------
+    # CHECK COMPLETION
+    # --------------------------------------------------
+
+    if new_completed_hours >= target_hours:
+
+        new_completed_hours = target_hours
+
+        new_status = "Completed"
+
+    else:
+
+        new_status = "Pending"
+
+
+    # --------------------------------------------------
+    # SAVE GOAL PROGRESS
+    # --------------------------------------------------
+
+    cursor.execute("""
+        UPDATE study_goals
+        SET
+            completed_hours = ?,
+            status = ?
+        WHERE id = ?
+    """, (
+        new_completed_hours,
+        new_status,
+        goal_id
+    ))
+
+
+    conn.commit()
+    conn.close()
+
+
+    return redirect(
+        url_for("goals")
+    )
+
+
+# ==================================================
+# START APPLICATION
+# ==================================================
 
 if __name__ == "__main__":
+
+    setup_database()
 
     app.run(debug=True)
