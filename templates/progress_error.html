@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>Progress Error - Smart Study Buddy</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+
+<body>
+
+    <nav>
+
+        <a href="/">🏠 Dashboard</a>
+
+        <a href="/plans">📚 Study Plans</a>
+
+        <a href="/progress">📊 Progress</a>
+
+        <a href="/">🎯 Goals</a>
+
+        <a href="/">💡 Recommendations</a>
+
+    </nav>
+
+
+    <div class="container">
+
+        <div class="card">
+
+            <h1>⚠️ Cannot Add Progress</h1>
+
+            <h2>{{ subject }}</h2>
+
+            <p>
+                You are trying to add
+                <strong>{{ attempted }}</strong>
+                hours.
+            </p>
+
+            <p>
+                Planned Hours:
+                <strong>{{ planned }}</strong>
+            </p>
+
+            <p>
+                Already Completed:
+                <strong>{{ completed }}</strong>
+            </p>
+
+            <p>
+                Remaining Hours:
+                <strong>{{ remaining }}</strong>
+            </p>
+
+            <p>
+                You can only add up to
+                <strong>{{ remaining }}</strong>
+                more hours.
+            </p>
+
+            <br>
+
+            <a href="/progress">
+                ← Back to Progress
+            </a>
+
+        </div>
+
+    </div>
+
+</body>
+
+</html>
