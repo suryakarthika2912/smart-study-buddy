@@ -15,13 +15,9 @@
     <nav>
 
         <a href="/">🏠 Dashboard</a>
-
         <a href="/plans">📚 Study Plans</a>
-
         <a href="/progress">📊 Progress</a>
-
         <a href="/goals">🎯 Goals</a>
-
         <a href="/">💡 Recommendations</a>
 
     </nav>
@@ -118,49 +114,66 @@
                         border-radius:12px;
                     ">
 
+                        <!-- GOAL -->
+
                         <h3>
                             {{ goal.goal }}
                         </h3>
 
 
+                        <!-- TARGET -->
+
                         <p>
 
                             Target:
+
                             <strong>
                                 {{ goal.target }}
                             </strong>
+
                             hours
 
                         </p>
 
+
+                        <!-- COMPLETED -->
 
                         <p>
 
                             Completed:
+
                             <strong>
                                 {{ goal.completed }}
                             </strong>
+
                             hours
 
                         </p>
 
+
+                        <!-- REMAINING -->
 
                         <p>
 
                             Remaining:
+
                             <strong>
                                 {{ "%.1f"|format(
-                                    goal.target - goal.completed
+                                    goal.remaining_hours
                                 ) }}
                             </strong>
+
                             hours
 
                         </p>
 
 
+                        <!-- DEADLINE -->
+
                         <p>
 
-                            Deadline:
+                            📅 Deadline:
+
                             <strong>
                                 {{ goal.deadline }}
                             </strong>
@@ -168,14 +181,118 @@
                         </p>
 
 
+                        <!-- DAYS LEFT -->
+
+                        {% if goal.days_left is not none %}
+
+                            {% if goal.days_left > 0 %}
+
+                                <p>
+
+                                    📆 Days Left:
+
+                                    <strong>
+                                        {{ goal.days_left }}
+                                    </strong>
+
+                                </p>
+
+                            {% elif goal.days_left == 0 %}
+
+                                <p>
+
+                                    ⚠️
+
+                                    <strong>
+                                        Deadline is today!
+                                    </strong>
+
+                                </p>
+
+                            {% else %}
+
+                                <p>
+
+                                    🔴
+
+                                    <strong>
+                                        Deadline has passed.
+                                    </strong>
+
+                                </p>
+
+                            {% endif %}
+
+                        {% endif %}
+
+
+                        <!-- ================================= -->
+                        <!-- DEADLINE STATUS -->
+                        <!-- ================================= -->
+
                         <p>
 
-                            Status:
+                            Deadline Status:
+
+                            {% if goal.deadline_status == "Completed" %}
+
+                                <strong>
+                                    ✅ Goal Completed
+                                </strong>
+
+                            {% elif goal.deadline_status == "Overdue" %}
+
+                                <strong>
+                                    🔴 Overdue
+                                </strong>
+
+                            {% elif goal.deadline_status == "Due Today" %}
+
+                                <strong>
+                                    ⚠️ Due Today
+                                </strong>
+
+                            {% elif goal.deadline_status == "Due Soon" %}
+
+                                <strong>
+                                    🟡 Due Soon
+                                </strong>
+
+                            {% elif goal.deadline_status == "In Progress" %}
+
+                                <strong>
+                                    🔵 In Progress
+                                </strong>
+
+                            {% else %}
+
+                                <strong>
+                                    ⚪ No Deadline
+                                </strong>
+
+                            {% endif %}
+
+                        </p>
+
+
+                        <!-- ================================= -->
+                        <!-- GOAL STATUS -->
+                        <!-- ================================= -->
+
+                        <p>
+
+                            Goal Status:
 
                             {% if goal.status == "Completed" %}
 
                                 <strong>
                                     ✅ Completed
+                                </strong>
+
+                            {% elif goal.status == "In Progress" %}
+
+                                <strong>
+                                    🔵 In Progress
                                 </strong>
 
                             {% else %}
@@ -189,9 +306,9 @@
                         </p>
 
 
-                        <!-- ============================= -->
+                        <!-- ================================= -->
                         <!-- PROGRESS BAR -->
-                        <!-- ============================= -->
+                        <!-- ================================= -->
 
                         <div style="
                             background:#e5e7eb;
@@ -210,20 +327,64 @@
                         </div>
 
 
+                        <!-- PROGRESS -->
+
                         <p>
 
                             Progress:
 
                             <strong>
-                                {{ "%.1f"|format(goal.progress) }}%
+                                {{ "%.1f"|format(
+                                    goal.progress
+                                ) }}%
                             </strong>
 
                         </p>
 
 
-                        <!-- ============================= -->
+                        <!-- ================================= -->
+                        <!-- SMART RECOMMENDATION -->
+                        <!-- ================================= -->
+
+                        <div style="
+                            padding:15px;
+                            margin:15px 0;
+                            background:#eef2ff;
+                            border-radius:10px;
+                        ">
+
+                            <strong>
+                                💡 Smart Recommendation
+                            </strong>
+
+                            <p>
+                                {{ goal.recommendation }}
+                            </p>
+
+
+                            {% if goal.daily_hours > 0 %}
+
+                                <p>
+
+                                    Recommended daily study:
+
+                                    <strong>
+                                        {{ "%.1f"|format(
+                                            goal.daily_hours
+                                        ) }}
+                                        hours/day
+                                    </strong>
+
+                                </p>
+
+                            {% endif %}
+
+                        </div>
+
+
+                        <!-- ================================= -->
                         <!-- ADD GOAL PROGRESS -->
-                        <!-- ============================= -->
+                        <!-- ================================= -->
 
                         {% if goal.status != "Completed" %}
 
