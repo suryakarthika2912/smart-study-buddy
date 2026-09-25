@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>Study Calendar - Smart Study Buddy</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+    <style>
+
+        .calendar-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            margin-top: 25px;
+        }
+
+        .calendar-title {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .calendar {
+            display: grid;
+            grid-template-columns:
+                repeat(7, 1fr);
+            gap: 8px;
+        }
+
+        .day-name {
+            text-align: center;
+            font-weight: bold;
+            padding: 12px 5px;
+            background: #eef2ff;
+            border-radius: 8px;
+        }
+
+        .day {
+            min-height: 65px;
+            padding: 10px;
+            border-radius: 10px;
+            background: #f5f7fa;
+            text-align: center;
+            position: relative;
+        }
+
+        .empty-day {
+            min-height: 65px;
+        }
+
+        .day-number {
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .studied {
+            background: #dcfce7;
+            border: 2px solid #22c55e;
+        }
+
+        .today {
+            border: 3px solid #4f46e5;
+        }
+
+        .study-icon {
+            display: block;
+            margin-top: 6px;
+            font-size: 20px;
+        }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            margin-top: 25px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .legend-box {
+            width: 18px;
+            height: 18px;
+            border-radius: 5px;
+        }
+
+        .studied-box {
+            background: #dcfce7;
+            border: 2px solid #22c55e;
+        }
+
+        .today-box {
+            background: #f5f7fa;
+            border: 3px solid #4f46e5;
+        }
+
+        @media (max-width: 600px) {
+
+            .calendar {
+                gap: 4px;
+            }
+
+            .day {
+                min-height: 50px;
+                padding: 5px;
+            }
+
+            .day-number {
+                font-size: 14px;
+            }
+
+            .study-icon {
+                font-size: 15px;
+            }
+
+            .day-name {
+                font-size: 12px;
+            }
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+    <!-- Navigation -->
+
+    <nav>
+
+        <a href="/">
+            🏠 Dashboard
+        </a>
+
+        <a href="/plans">
+            📚 Study Plans
+        </a>
+
+        <a href="/progress">
+            📊 Progress
+        </a>
+
+        <a href="/goals">
+            🎯 Goals
+        </a>
+
+        <a href="/calendar">
+            📅 Calendar
+        </a>
+
+    </nav>
+
+
+    <!-- Main Container -->
+
+    <div class="container">
+
+        <div class="calendar-card">
+
+            <div class="calendar-title">
+
+                <h1>
+                    📅 {{ month_name }} {{ year }}
+                </h1>
+
+                <p>
+                    Your study activity calendar
+                </p>
+
+            </div>
+
+
+            <!-- Calendar -->
+
+            <div class="calendar">
+
+                <!-- Week days -->
+
+                <div class="day-name">
+                    Mon
+                </div>
+
+                <div class="day-name">
+                    Tue
+                </div>
+
+                <div class="day-name">
+                    Wed
+                </div>
+
+                <div class="day-name">
+                    Thu
+                </div>
+
+                <div class="day-name">
+                    Fri
+                </div>
+
+                <div class="day-name">
+                    Sat
+                </div>
+
+                <div class="day-name">
+                    Sun
+                </div>
+
+
+                <!-- Calendar dates -->
+
+                {% for day in calendar_days %}
+
+                    {% if day is none %}
+
+                        <div class="empty-day"></div>
+
+                    {% else %}
+
+                        <div class="
+                            day
+                            {% if day.studied %}
+                                studied
+                            {% endif %}
+                            {% if day.today %}
+                                today
+                            {% endif %}
+                        ">
+
+                            <span class="day-number">
+                                {{ day.day }}
+                            </span>
+
+                            {% if day.studied %}
+
+                                <span class="study-icon">
+                                    🔥
+                                </span>
+
+                            {% endif %}
+
+                        </div>
+
+                    {% endif %}
+
+                {% endfor %}
+
+            </div>
+
+
+            <!-- Legend -->
+
+            <div class="legend">
+
+                <div class="legend-item">
+
+                    <div class="legend-box studied-box"></div>
+
+                    <span>
+                        Studied
+                    </span>
+
+                </div>
+
+
+                <div class="legend-item">
+
+                    <div class="legend-box today-box"></div>
+
+                    <span>
+                        Today
+                    </span>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- Back -->
+
+        <div style="
+            text-align:center;
+            margin-top:20px;
+        ">
+
+            <a href="/">
+                ← Back to Dashboard
+            </a>
+
+        </div>
+
+    </div>
+
+</body>
+
+</html>

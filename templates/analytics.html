@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Subject Analytics - Smart Study Buddy</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+    <style>
+
+        .analytics-header {
+            margin-bottom: 25px;
+        }
+
+        .analytics-header h1 {
+            margin-bottom: 8px;
+        }
+
+        .analytics-grid {
+            display: grid;
+            grid-template-columns:
+                repeat(auto-fit, minmax(220px, 1fr));
+            gap: 18px;
+            margin-bottom: 25px;
+        }
+
+        .analytics-card {
+            padding: 22px;
+            border-radius: 16px;
+            background: white;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .analytics-card h3 {
+            margin-top: 0;
+        }
+
+        .analytics-number {
+            font-size: 28px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .subject-card {
+            background: white;
+            border-radius: 16px;
+            padding: 22px;
+            margin-bottom: 18px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .subject-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .subject-title h2 {
+            margin: 0;
+        }
+
+        .percentage {
+            font-size: 22px;
+            font-weight: bold;
+        }
+
+        .progress-background {
+            width: 100%;
+            height: 18px;
+            background: #eeeeee;
+            border-radius: 20px;
+            overflow: hidden;
+            margin: 12px 0 18px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            border-radius: 20px;
+            background: linear-gradient(
+                90deg,
+                #667eea,
+                #764ba2
+            );
+        }
+
+        .subject-stats {
+            display: grid;
+            grid-template-columns:
+                repeat(auto-fit, minmax(130px, 1fr));
+            gap: 12px;
+        }
+
+        .stat-box {
+            padding: 14px;
+            border-radius: 12px;
+            background: #f7f7f7;
+        }
+
+        .stat-box strong {
+            display: block;
+            font-size: 18px;
+            margin-top: 5px;
+        }
+
+        .insights {
+            display: grid;
+            grid-template-columns:
+                repeat(auto-fit, minmax(240px, 1fr));
+            gap: 18px;
+            margin-top: 25px;
+        }
+
+        .insight-card {
+            padding: 20px;
+            border-radius: 16px;
+            background: white;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .back-button {
+            display: inline-block;
+            margin-bottom: 20px;
+            text-decoration: none;
+            padding: 10px 16px;
+            border-radius: 10px;
+            background: #667eea;
+            color: white;
+        }
+
+        .empty-message {
+            padding: 30px;
+            text-align: center;
+            background: white;
+            border-radius: 16px;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+    <!-- NAVIGATION -->
+
+    <nav class="navbar">
+
+        <div class="logo">
+            📚 Smart Study Buddy
+        </div>
+
+        <div class="nav-links">
+
+            <a href="/">
+                🏠 Dashboard
+            </a>
+
+            <a href="/plans">
+                📚 Study Plans
+            </a>
+
+            <a href="/progress">
+                📊 Progress
+            </a>
+
+            <a href="/goals">
+                🎯 Goals
+            </a>
+
+            <a href="/calendar">
+                🔥 Calendar
+            </a>
+
+            <a href="/analytics">
+                📈 Analytics
+            </a>
+
+        </div>
+
+    </nav>
+
+
+    <div class="container">
+
+        <a href="/" class="back-button">
+            ← Back to Dashboard
+        </a>
+
+
+        <!-- HEADER -->
+
+        <div class="analytics-header">
+
+            <h1>
+                📊 Subject-wise Analytics
+            </h1>
+
+            <p>
+                Understand your study progress subject by subject.
+            </p>
+
+        </div>
+
+
+        <!-- SUMMARY CARDS -->
+
+        <div class="analytics-grid">
+
+            <div class="analytics-card">
+
+                <h3>
+                    📚 Subjects
+                </h3>
+
+                <div class="analytics-number">
+                    {{ subjects|length }}
+                </div>
+
+            </div>
+
+
+            <div class="analytics-card">
+
+                <h3>
+                    ⏱️ Planned Hours
+                </h3>
+
+                <div class="analytics-number">
+
+                    {{ "%.1f"|format(total_planned) }}
+
+                </div>
+
+            </div>
+
+
+            <div class="analytics-card">
+
+                <h3>
+                    ✅ Completed Hours
+                </h3>
+
+                <div class="analytics-number">
+
+                    {{ "%.1f"|format(total_completed) }}
+
+                </div>
+
+            </div>
+
+
+            <div class="analytics-card">
+
+                <h3>
+                    📌 Remaining Hours
+                </h3>
+
+                <div class="analytics-number">
+
+                    {{ "%.1f"|format(total_remaining) }}
+
+                </div>
+
+            </div>
+
+
+            <div class="analytics-card">
+
+                <h3>
+                    📈 Overall Progress
+                </h3>
+
+                <div class="analytics-number">
+
+                    {{ "%.1f"|format(overall_percentage) }}%
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- SUBJECT ANALYTICS -->
+
+        <h2>
+            📚 Subject Progress
+        </h2>
+
+
+        {% if subjects %}
+
+            {% for subject in subjects %}
+
+                <div class="subject-card">
+
+                    <div class="subject-title">
+
+                        <h2>
+                            {{ subject.subject }}
+                        </h2>
+
+                        <div class="percentage">
+
+                            {{ "%.1f"|format(subject.percentage) }}%
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- PROGRESS BAR -->
+
+                    <div class="progress-background">
+
+                        <div
+                            class="progress-bar"
+                            style="width: {{ subject.percentage }}%;">
+                        </div>
+
+                    </div>
+
+
+                    <!-- SUBJECT STATS -->
+
+                    <div class="subject-stats">
+
+                        <div class="stat-box">
+
+                            Planned
+
+                            <strong>
+                                {{ "%.1f"|format(subject.planned) }}
+                                hrs
+                            </strong>
+
+                        </div>
+
+
+                        <div class="stat-box">
+
+                            Completed
+
+                            <strong>
+                                {{ "%.1f"|format(subject.completed) }}
+                                hrs
+                            </strong>
+
+                        </div>
+
+
+                        <div class="stat-box">
+
+                            Remaining
+
+                            <strong>
+                                {{ "%.1f"|format(subject.remaining) }}
+                                hrs
+                            </strong>
+
+                        </div>
+
+
+                        <div class="stat-box">
+
+                            Progress
+
+                            <strong>
+                                {{ "%.1f"|format(subject.percentage) }}%
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            {% endfor %}
+
+        {% else %}
+
+            <div class="empty-message">
+
+                <h2>
+                    📚 No subjects yet
+                </h2>
+
+                <p>
+                    Create a study plan first to see subject analytics.
+                </p>
+
+                <a href="/plans">
+                    Create Study Plan
+                </a>
+
+            </div>
+
+        {% endif %}
+
+
+        <!-- INSIGHTS -->
+
+        {% if subjects %}
+
+            <h2 style="margin-top: 30px;">
+                💡 Study Insights
+            </h2>
+
+            <div class="insights">
+
+
+                <!-- MOST PLANNED -->
+
+                {% if most_planned %}
+
+                    <div class="insight-card">
+
+                        <h3>
+                            ⏱️ Most Planned
+                        </h3>
+
+                        <p>
+                            <strong>
+                                {{ most_planned.subject }}
+                            </strong>
+                        </p>
+
+                        <p>
+                            {{ "%.1f"|format(most_planned.planned) }}
+                            planned hours
+                        </p>
+
+                    </div>
+
+                {% endif %}
+
+
+                <!-- MOST COMPLETED -->
+
+                {% if most_completed %}
+
+                    <div class="insight-card">
+
+                        <h3>
+                            ✅ Most Completed
+                        </h3>
+
+                        <p>
+                            <strong>
+                                {{ most_completed.subject }}
+                            </strong>
+                        </p>
+
+                        <p>
+                            {{ "%.1f"|format(most_completed.completed) }}
+                            completed hours
+                        </p>
+
+                    </div>
+
+                {% endif %}
+
+
+                <!-- MOST REMAINING -->
+
+                {% if most_remaining %}
+
+                    <div class="insight-card">
+
+                        <h3>
+                            📌 Most Remaining
+                        </h3>
+
+                        <p>
+                            <strong>
+                                {{ most_remaining.subject }}
+                            </strong>
+                        </p>
+
+                        <p>
+                            {{ "%.1f"|format(most_remaining.remaining) }}
+                            hours remaining
+                        </p>
+
+                    </div>
+
+                {% endif %}
+
+
+            </div>
+
+        {% endif %}
+
+
+    </div>
+
+</body>
+
+</html>
