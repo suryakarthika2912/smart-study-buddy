@@ -1,15 +1,16 @@
 from flask import Flask, render_template, request, redirect, url_for
 import sqlite3
-from datetime import date, timedelta
+from datetime import datetime, date, timedelta
+import calendar as pycalendar
 
 app = Flask(__name__)
 
 DATABASE = "study_buddy.db"
 
 
-# ==================================================
+# ============================================================
 # DATABASE CONNECTION
-# ==================================================
+# ============================================================
 
 def get_db_connection():
     conn = sqlite3.connect(DATABASE)
@@ -17,12 +18,11 @@ def get_db_connection():
     return conn
 
 
-# ==================================================
+# ============================================================
 # DATABASE SETUP
-# ==================================================
+# ============================================================
 
 def setup_database():
-
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
 
@@ -57,7 +57,14 @@ def setup_database():
         )
     """)
 
-    # Add added_at column if it does not exist
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS study_dates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            study_date TEXT UNIQUE
+        )
+    """)
+
+    # Added in the progress-history feature.
     try:
         cursor.execute("""
             ALTER TABLE study_progress
@@ -66,502 +73,499 @@ def setup_database():
     except sqlite3.OperationalError:
         pass
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS study_dates (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            study_date TEXT UNIQUE
-        )
-    """)
-
     conn.commit()
     conn.close()
 
 
-# ==================================================
-# STUDY STREAK
-# ==================================================
+# ============================================================
+# SMALL HELPERS
+# ============================================================
+
+def safe_percentage(completed, planned):
+    if planned and planned > 0:
+        return min((completed / planned) * 100, 100)
+    return 0
+
 
 def get_study_streak(cursor):
-
     cursor.execute("""
         SELECT study_date
         FROM study_dates
-        ORDER BY study_date ASC
+        ORDER BY study_date
     """)
 
     rows = cursor.fetchall()
-
-    study_dates = set()
+    dates = set()
 
     for row in rows:
-
         try:
-            study_date = date.fromisoformat(row[0])
-            study_dates.add(study_date)
-
+            dates.add(date.fromisoformat(row[0]))
         except (ValueError, TypeError):
-            continue
+            pass
 
-    if not study_dates:
-
+    if not dates:
         return {
             "current": 0,
             "longest": 0,
             "total_days": 0
         }
 
-    total_days = len(study_dates)
+    sorted_dates = sorted(dates)
 
-    # --------------------------------------------------
-    # LONGEST STREAK
-    # --------------------------------------------------
-
-    sorted_dates = sorted(study_dates)
-
-    longest_streak = 1
-    current_streak = 1
+    longest = 1
+    running = 1
 
     for i in range(1, len(sorted_dates)):
-
-        difference = (
-            sorted_dates[i]
-            - sorted_dates[i - 1]
-        ).days
-
-        if difference == 1:
-
-            current_streak += 1
-
-            if current_streak > longest_streak:
-                longest_streak = current_streak
-
+        if (sorted_dates[i] - sorted_dates[i - 1]).days == 1:
+            running += 1
+            longest = max(longest, running)
         else:
-
-            current_streak = 1
-
-    # --------------------------------------------------
-    # CURRENT STREAK
-    # --------------------------------------------------
+            running = 1
 
     today = date.today()
 
-    current_streak = 0
-    check_date = today
+    if today in dates:
+        check = today
+    elif today - timedelta(days=1) in dates:
+        check = today - timedelta(days=1)
+    else:
+        check = None
 
-    if today not in study_dates:
+    current = 0
 
-        yesterday = today - timedelta(days=1)
-
-        if yesterday in study_dates:
-            check_date = yesterday
-
-        else:
-            check_date = None
-
-    if check_date is not None:
-
-        while check_date in study_dates:
-
-            current_streak += 1
-
-            check_date = (
-                check_date
-                - timedelta(days=1)
-            )
+    while check is not None and check in dates:
+        current += 1
+        check -= timedelta(days=1)
 
     return {
-        "current": current_streak,
-        "longest": longest_streak,
-        "total_days": total_days
+        "current": current,
+        "longest": longest,
+        "total_days": len(dates)
     }
 
 
-# ==================================================
-# DEADLINE STATUS
-# ==================================================
-
 def get_deadline_status(deadline, status):
-
     if status == "Completed":
         return "Completed"
 
-    try:
-
-        deadline_date = date.fromisoformat(deadline)
-
-    except (ValueError, TypeError):
-
+    if not deadline:
         return "No Deadline"
 
-    today = date.today()
+    try:
+        deadline_date = date.fromisoformat(deadline)
+    except (ValueError, TypeError):
+        return "No Deadline"
 
-    remaining_days = (
-        deadline_date - today
-    ).days
+    days_left = (deadline_date - date.today()).days
 
-    if remaining_days < 0:
+    if days_left < 0:
         return "Overdue"
-
-    elif remaining_days == 0:
+    if days_left == 0:
         return "Due Today"
-
-    elif remaining_days <= 3:
+    if days_left <= 3:
         return "Due Soon"
 
-    else:
-        return "In Progress"
+    return "In Progress"
 
 
-# ==================================================
-# GOAL RECOMMENDATION
-# ==================================================
-
-def get_goal_recommendation(
-    target,
-    completed,
-    deadline,
-    status
-):
+def get_goal_recommendation(target, completed, deadline, status):
+    remaining = max((target or 0) - (completed or 0), 0)
 
     if status == "Completed":
-
         return {
             "days_left": 0,
             "remaining_hours": 0,
             "daily_hours": 0,
+            "recommendation": "🎉 Goal completed! Great work!"
+        }
+
+    if not deadline:
+        return {
+            "days_left": None,
+            "remaining_hours": remaining,
+            "daily_hours": 0,
             "recommendation":
-                "🎉 Goal completed! Great work!"
+                "📅 Add a deadline to get a daily study recommendation."
         }
 
     try:
-
-        deadline_date = date.fromisoformat(
-            deadline
-        )
-
+        deadline_date = date.fromisoformat(deadline)
     except (ValueError, TypeError):
-
         return {
             "days_left": None,
-            "remaining_hours":
-                max(target - completed, 0),
+            "remaining_hours": remaining,
             "daily_hours": 0,
             "recommendation":
-                "📅 Add a valid deadline to get a daily study recommendation."
+                "📅 Add a valid deadline to get a daily recommendation."
         }
 
-    today = date.today()
+    days_left = (deadline_date - date.today()).days
 
-    days_left = (
-        deadline_date - today
-    ).days
-
-    remaining_hours = max(
-        target - completed,
-        0
-    )
-
-    if days_left < 0:
-
+    if remaining <= 0:
         return {
             "days_left": days_left,
-            "remaining_hours": remaining_hours,
+            "remaining_hours": 0,
+            "daily_hours": 0,
+            "recommendation": "🎉 Goal requirements completed!"
+        }
+
+    if days_left < 0:
+        return {
+            "days_left": days_left,
+            "remaining_hours": remaining,
             "daily_hours": 0,
             "recommendation":
-                f"🔴 This goal is overdue with "
-                f"{remaining_hours:.1f} hours remaining."
+                f"🔴 This goal is overdue with {remaining:.1f} hours remaining."
         }
 
     if days_left == 0:
-
         return {
             "days_left": 0,
-            "remaining_hours": remaining_hours,
-            "daily_hours": remaining_hours,
+            "remaining_hours": remaining,
+            "daily_hours": remaining,
             "recommendation":
-                f"⚠️ Deadline is today. "
-                f"Complete {remaining_hours:.1f} more hours."
+                f"⚠️ Deadline is today. Complete {remaining:.1f} more hours."
         }
 
-    if remaining_hours <= 0:
-
-        return {
-            "days_left": days_left,
-            "remaining_hours": 0,
-            "daily_hours": 0,
-            "recommendation":
-                "🎉 Goal requirements completed!"
-        }
-
-    daily_hours = (
-        remaining_hours / days_left
-    )
+    daily = remaining / days_left
 
     return {
         "days_left": days_left,
-        "remaining_hours": remaining_hours,
-        "daily_hours": daily_hours,
+        "remaining_hours": remaining,
+        "daily_hours": daily,
         "recommendation":
-            f"💡 Study {daily_hours:.1f} hours/day "
-            f"to complete this goal on time."
+            f"💡 Study {daily:.1f} hours/day to complete this goal on time."
     }
 
 
-# ==================================================
-# DASHBOARD RECOMMENDATION
-# ==================================================
+# ============================================================
+# GOAL DATA
+# ============================================================
 
-def get_dashboard_recommendation(cursor):
+def get_goals_data(cursor=None):
+    own_connection = cursor is None
+
+    if own_connection:
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
 
     cursor.execute("""
         SELECT
+            id,
             goal,
             target_hours,
             completed_hours,
             deadline,
             status
         FROM study_goals
-        WHERE status != 'Completed'
         ORDER BY id DESC
     """)
 
-    goals = cursor.fetchall()
+    rows = cursor.fetchall()
+    result = []
 
-    if not goals:
+    for row in rows:
+        goal_id = row[0]
+        goal_name = row[1]
+        target = row[2] or 0
+        completed = row[3] or 0
+        deadline = row[4]
+        status = row[5]
 
+        recommendation = get_goal_recommendation(
+            target,
+            completed,
+            deadline,
+            status
+        )
+
+        percentage = safe_percentage(completed, target)
+
+        result.append({
+            "id": goal_id,
+            "goal": goal_name,
+            "target": target,
+            "target_hours": target,
+            "completed": completed,
+            "completed_hours": completed,
+            "remaining": max(target - completed, 0),
+            "remaining_hours": max(target - completed, 0),
+            "deadline": deadline,
+            "status": status,
+            "deadline_status":
+                get_deadline_status(deadline, status),
+            "days_left":
+                recommendation["days_left"],
+            "daily_hours":
+                recommendation["daily_hours"],
+            "recommendation":
+                recommendation["recommendation"],
+            "percentage": percentage,
+            "progress": percentage
+        })
+
+    if own_connection:
+        conn.close()
+
+    return result
+
+
+def get_dashboard_recommendation(cursor):
+    goals = get_goals_data(cursor)
+
+    active = [
+        goal for goal in goals
+        if goal["status"] != "Completed"
+    ]
+
+    if not active:
         return (
             "📚 No active goals right now. "
             "Create a study goal to get smart recommendations!"
         )
 
-    # --------------------------------------------------
-    # OVERDUE GOALS
-    # --------------------------------------------------
+    overdue = [
+        goal for goal in active
+        if goal["deadline_status"] == "Overdue"
+    ]
 
-    for goal in goals:
-
-        goal_name = goal[0]
-        target = goal[1]
-        completed = goal[2]
-        deadline = goal[3]
-        status = goal[4]
-
-        recommendation = get_goal_recommendation(
-            target,
-            completed,
-            deadline,
-            status
-        )
-
-        if recommendation["days_left"] is not None:
-
-            if recommendation["days_left"] < 0:
-
-                return (
-                    f"🔴 Attention Needed: "
-                    f"'{goal_name}' is overdue with "
-                    f"{recommendation['remaining_hours']:.1f} "
-                    f"hours remaining."
-                )
-
-    # --------------------------------------------------
-    # DEADLINE TODAY
-    # --------------------------------------------------
-
-    for goal in goals:
-
-        goal_name = goal[0]
-        target = goal[1]
-        completed = goal[2]
-        deadline = goal[3]
-        status = goal[4]
-
-        recommendation = get_goal_recommendation(
-            target,
-            completed,
-            deadline,
-            status
-        )
-
-        if recommendation["days_left"] == 0:
-
-            return (
-                f"⚠️ Deadline Today: "
-                f"'{goal_name}' has "
-                f"{recommendation['remaining_hours']:.1f} "
-                f"hours remaining."
-            )
-
-    # --------------------------------------------------
-    # NEAREST UPCOMING GOAL
-    # --------------------------------------------------
-
-    urgent_goal = None
-    urgent_days = None
-
-    for goal in goals:
-
-        target = goal[1]
-        completed = goal[2]
-        deadline = goal[3]
-        status = goal[4]
-
-        recommendation = get_goal_recommendation(
-            target,
-            completed,
-            deadline,
-            status
-        )
-
-        days_left = recommendation["days_left"]
-
-        if days_left is None:
-            continue
-
-        if days_left > 0:
-
-            if (
-                urgent_days is None
-                or days_left < urgent_days
-            ):
-
-                urgent_days = days_left
-
-                urgent_goal = (
-                    goal,
-                    recommendation
-                )
-
-    if urgent_goal:
-
-        goal = urgent_goal[0]
-        recommendation = urgent_goal[1]
-
-        goal_name = goal[0]
-
+    if overdue:
+        goal = overdue[0]
         return (
-            f"💡 Smart Plan: Study "
-            f"{recommendation['daily_hours']:.1f} "
-            f"hours/day for '{goal_name}' "
-            f"to finish it in time."
+            f"🔴 Attention Needed: '{goal['goal']}' is overdue with "
+            f"{goal['remaining_hours']:.1f} hours remaining."
         )
 
-    return (
-        "📚 Keep going! "
-        "Continue following your study schedule."
-    )
+    today_goals = [
+        goal for goal in active
+        if goal["deadline_status"] == "Due Today"
+    ]
+
+    if today_goals:
+        goal = today_goals[0]
+        return (
+            f"⚠️ Deadline Today: '{goal['goal']}' has "
+            f"{goal['remaining_hours']:.1f} hours remaining."
+        )
+
+    upcoming = [
+        goal for goal in active
+        if goal["days_left"] is not None
+        and goal["days_left"] > 0
+    ]
+
+    if upcoming:
+        goal = min(upcoming, key=lambda item: item["days_left"])
+        return (
+            f"💡 Smart Plan: Study {goal['daily_hours']:.1f} hours/day "
+            f"for '{goal['goal']}' to finish it in time."
+        )
+
+    return "📚 Keep going! Continue following your study schedule."
 
 
-# ==================================================
+# ============================================================
+# SUBJECT DATA
+# ============================================================
+
+def get_subject_data(cursor):
+    cursor.execute("""
+        SELECT
+            subject,
+            SUM(days * daily_hours) AS planned
+        FROM study_plans
+        GROUP BY subject
+        ORDER BY subject
+    """)
+
+    planned_rows = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT
+            subject,
+            SUM(completed_hours) AS completed
+        FROM study_progress
+        GROUP BY subject
+    """)
+
+    completed_rows = cursor.fetchall()
+
+    completed_map = {
+        row[0]: (row[1] or 0)
+        for row in completed_rows
+    }
+
+    subjects = []
+
+    for row in planned_rows:
+        subject = row[0]
+        planned = row[1] or 0
+        completed = completed_map.get(subject, 0)
+        progress = safe_percentage(completed, planned)
+
+        if progress >= 70:
+            status = "On Track"
+            status_icon = "🟢"
+        elif progress >= 30:
+            status = "Needs Attention"
+            status_icon = "🟡"
+        elif progress > 0:
+            status = "Behind"
+            status_icon = "🔴"
+        else:
+            status = "Not Started"
+            status_icon = "⚪"
+
+        subjects.append({
+            "name": subject,
+            "subject": subject,
+            "planned": planned,
+            "completed": completed,
+            "remaining": max(planned - completed, 0),
+            "progress": progress,
+            "percentage": progress,
+            "status": status,
+            "status_icon": status_icon
+        })
+
+    return subjects
+
+
+# ============================================================
 # DASHBOARD DATA
-# ==================================================
+# ============================================================
 
 def get_dashboard_data():
-
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
-    # Total subjects
-    cursor.execute("""
-        SELECT DISTINCT subject
-        FROM study_plans
-    """)
-
-    subjects = cursor.fetchall()
+    subjects = get_subject_data(cursor)
 
     total_subjects = len(subjects)
+    planned_hours = sum(item["planned"] for item in subjects)
+    completed_hours = sum(item["completed"] for item in subjects)
 
-    # Planned hours
-    cursor.execute("""
-        SELECT SUM(days * daily_hours)
-        FROM study_plans
-    """)
-
-    planned_result = cursor.fetchone()[0]
-
-    planned_hours = planned_result or 0
-
-    # Completed hours
-    cursor.execute("""
-        SELECT SUM(completed_hours)
-        FROM study_progress
-    """)
-
-    completed_result = cursor.fetchone()[0]
-
-    completed_hours = completed_result or 0
-
-    # Overall progress
-    if planned_hours > 0:
-
-        overall_progress = (
-            completed_hours /
-            planned_hours
-        ) * 100
-
-    else:
-
-        overall_progress = 0
-
-    # Prevent progress from going above 100
-    overall_progress = min(
-        overall_progress,
-        100
+    overall_progress = safe_percentage(
+        completed_hours,
+        planned_hours
     )
 
-    # Active goals
     cursor.execute("""
         SELECT COUNT(*)
         FROM study_goals
         WHERE status != 'Completed'
     """)
-
     active_goals = cursor.fetchone()[0]
 
-    # Completed goals
     cursor.execute("""
         SELECT COUNT(*)
         FROM study_goals
         WHERE status = 'Completed'
     """)
-
     completed_goals = cursor.fetchone()[0]
 
-    # Recommendation
-    recommendation = (
-        get_dashboard_recommendation(cursor)
-    )
-
-    # Study streak
+    recommendation = get_dashboard_recommendation(cursor)
     streak = get_study_streak(cursor)
+    goals = get_goals_data(cursor)
+
+    # Priority recommendation.
+    recommendation_subject = ""
+    recommendation_priority = 0
+
+    cursor.execute("""
+        SELECT subject, priority
+        FROM study_plans
+        ORDER BY priority DESC, id DESC
+        LIMIT 1
+    """)
+
+    priority_row = cursor.fetchone()
+
+    if priority_row:
+        recommendation_subject = priority_row[0]
+        recommendation_priority = priority_row[1] or 0
+
+    # Today's studied hours.
+    today = date.today().isoformat()
+
+    cursor.execute("""
+        SELECT SUM(completed_hours)
+        FROM study_progress
+        WHERE DATE(added_at) = ?
+    """, (today,))
+
+    today_hours = cursor.fetchone()[0] or 0
+
+    # Recent progress.
+    cursor.execute("""
+        SELECT subject, completed_hours, added_at
+        FROM study_progress
+        ORDER BY id DESC
+        LIMIT 5
+    """)
+
+    recent_progress = [
+        {
+            "subject": row[0],
+            "hours": row[1] or 0,
+            "added_at": row[2]
+        }
+        for row in cursor.fetchall()
+    ]
+
+    # Nearest active deadline.
+    upcoming = [
+        goal for goal in goals
+        if goal["status"] != "Completed"
+        and goal["days_left"] is not None
+        and goal["days_left"] >= 0
+    ]
+
+    nearest_deadline = (
+        min(upcoming, key=lambda item: item["days_left"])
+        if upcoming else None
+    )
 
     conn.close()
 
+    # IMPORTANT:
+    # This is a dictionary because index.html uses data.xxx.
+    # It also contains both overall_progress and overall_percentage
+    # for compatibility with different dashboard templates.
     return {
         "total_subjects": total_subjects,
         "planned_hours": planned_hours,
         "completed_hours": completed_hours,
         "overall_progress": overall_progress,
+        "overall_percentage": overall_progress,
         "active_goals": active_goals,
         "completed_goals": completed_goals,
+        "subjects": subjects,
+        "goals": goals,
         "recommendation": recommendation,
-        "streak": streak
+        "recommendation_subject": recommendation_subject,
+        "recommendation_priority": recommendation_priority,
+        "current_streak": streak["current"],
+        "longest_streak": streak["longest"],
+        "total_study_days": streak["total_days"],
+        "today_hours": today_hours,
+        "recent_progress": recent_progress,
+        "nearest_deadline": nearest_deadline
     }
 
 
-# ==================================================
-# DASHBOARD
-# ==================================================
+# ============================================================
+# DASHBOARD - STEP 82
+# ============================================================
 
 @app.route("/")
 def index():
-
     data = get_dashboard_data()
 
     return render_template(
         "index.html",
         data=data,
+        # Compatibility with older index templates.
         total_subjects=data["total_subjects"],
         planned_hours=data["planned_hours"],
         completed_hours=data["completed_hours"],
@@ -569,49 +573,38 @@ def index():
         active_goals=data["active_goals"],
         completed_goals=data["completed_goals"],
         recommendation=data["recommendation"],
-        streak=data["streak"]
+        streak=data["current_streak"]
     )
 
 
-# ==================================================
+# ============================================================
 # ADD STUDY PLAN
-# ==================================================
+# ============================================================
 
-@app.route(
-    "/add-plan",
-    methods=["POST"]
-)
+@app.route("/add-plan", methods=["POST"])
 def add_plan():
+    try:
+        name = request.form.get("name", "My Study Plan").strip()
+        subject = request.form["subject"].strip()
+        priority = int(request.form["priority"])
+        days = int(request.form["days"])
+        daily_hours = float(request.form["daily_hours"])
 
-    name = request.form["name"]
+        if not subject or priority < 1 or priority > 5:
+            return redirect(url_for("index"))
 
-    subject = request.form["subject"]
+        if days < 1 or daily_hours <= 0:
+            return redirect(url_for("index"))
 
-    priority = int(
-        request.form["priority"]
-    )
-
-    days = int(
-        request.form["days"]
-    )
-
-    daily_hours = float(
-        request.form["daily_hours"]
-    )
+    except (KeyError, ValueError):
+        return redirect(url_for("index"))
 
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
     cursor.execute("""
         INSERT INTO study_plans
-        (
-            name,
-            subject,
-            priority,
-            days,
-            daily_hours
-        )
+        (name, subject, priority, days, daily_hours)
         VALUES (?, ?, ?, ?, ?)
     """, (
         name,
@@ -624,20 +617,16 @@ def add_plan():
     conn.commit()
     conn.close()
 
-    return redirect(
-        url_for("plans")
-    )
+    return redirect(url_for("plans"))
 
 
-# ==================================================
+# ============================================================
 # STUDY PLANS
-# ==================================================
+# ============================================================
 
 @app.route("/plans")
 def plans():
-
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -662,68 +651,77 @@ def plans():
     )
 
 
-# ==================================================
-# DELETE PLAN
-# ==================================================
+# ============================================================
+# DELETE STUDY PLAN
+# ============================================================
 
-@app.route(
-    "/delete-plan/<int:plan_id>"
-)
+@app.route("/delete-plan/<int:plan_id>")
 def delete_plan(plan_id):
-
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
-    # Find the subject before deleting
     cursor.execute("""
         SELECT subject
         FROM study_plans
         WHERE id = ?
     """, (plan_id,))
 
-    result = cursor.fetchone()
+    row = cursor.fetchone()
 
-    cursor.execute("""
-        DELETE FROM study_plans
-        WHERE id = ?
-    """, (plan_id,))
+    if row:
+        subject = row[0]
+
+        # Delete the plan itself.
+        cursor.execute("""
+            DELETE FROM study_plans
+            WHERE id = ?
+        """, (plan_id,))
+
+        # Remove progress only if that subject has no remaining plan.
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM study_plans
+            WHERE subject = ?
+        """, (subject,))
+
+        remaining_plans = cursor.fetchone()[0]
+
+        if remaining_plans == 0:
+            cursor.execute("""
+                DELETE FROM study_progress
+                WHERE subject = ?
+            """, (subject,))
 
     conn.commit()
     conn.close()
 
-    return redirect(
-        url_for("plans")
-    )
+    return redirect(url_for("plans"))
 
 
-# ==================================================
-# UPDATE PLAN
-# ==================================================
+# ============================================================
+# UPDATE STUDY PLAN
+# ============================================================
 
-@app.route(
-    "/update-plan/<int:plan_id>",
-    methods=["GET", "POST"]
-)
+@app.route("/update-plan/<int:plan_id>", methods=["GET", "POST"])
 def update_plan(plan_id):
-
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
     if request.method == "POST":
+        try:
+            priority = int(request.form["priority"])
+            days = int(request.form["days"])
+            daily_hours = float(request.form["daily_hours"])
 
-        priority = int(
-            request.form["priority"]
-        )
+            if not 1 <= priority <= 5:
+                raise ValueError
 
-        days = int(
-            request.form["days"]
-        )
+            if days < 1 or daily_hours <= 0:
+                raise ValueError
 
-        daily_hours = float(
-            request.form["daily_hours"]
-        )
+        except (KeyError, ValueError):
+            conn.close()
+            return redirect(url_for("plans"))
 
         cursor.execute("""
             UPDATE study_plans
@@ -742,9 +740,7 @@ def update_plan(plan_id):
         conn.commit()
         conn.close()
 
-        return redirect(
-            url_for("plans")
-        )
+        return redirect(url_for("plans"))
 
     cursor.execute("""
         SELECT *
@@ -762,100 +758,17 @@ def update_plan(plan_id):
     )
 
 
-# ==================================================
+# ============================================================
 # PROGRESS PAGE
-# ==================================================
+# ============================================================
 
 @app.route("/progress")
 def progress():
-
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT
-            subject,
-            SUM(planned_hours),
-            SUM(completed_hours)
-        FROM study_progress
-        GROUP BY subject
-    """)
+    subjects = get_subject_data(cursor)
 
-    progress_rows = cursor.fetchall()
-
-    subjects = []
-
-    for row in progress_rows:
-
-        subject = row[0]
-
-        planned = row[1] or 0
-
-        completed = row[2] or 0
-
-        if planned > 0:
-
-            percentage = (
-                completed /
-                planned
-            ) * 100
-
-        else:
-
-            percentage = 0
-
-        percentage = min(
-            percentage,
-            100
-        )
-
-        subjects.append((
-            subject,
-            planned,
-            completed,
-            percentage
-        ))
-
-    # Subjects from study plans
-    cursor.execute("""
-        SELECT DISTINCT subject
-        FROM study_plans
-    """)
-
-    planned_subjects = [
-        row[0]
-        for row in cursor.fetchall()
-    ]
-
-    existing_subjects = [
-        row[0]
-        for row in subjects
-    ]
-
-    for subject in planned_subjects:
-
-        if subject not in existing_subjects:
-
-            cursor.execute("""
-                SELECT
-                    SUM(days * daily_hours)
-                FROM study_plans
-                WHERE subject = ?
-            """, (subject,))
-
-            planned = (
-                cursor.fetchone()[0] or 0
-            )
-
-            subjects.append((
-                subject,
-                planned,
-                0,
-                0
-            ))
-
-    # Progress history
     cursor.execute("""
         SELECT
             subject,
@@ -876,64 +789,46 @@ def progress():
     )
 
 
-# ==================================================
+# ============================================================
 # ADD PROGRESS
-# ==================================================
+# ============================================================
 
-@app.route(
-    "/add-progress",
-    methods=["POST"]
-)
+@app.route("/add-progress", methods=["POST"])
 def add_progress():
+    try:
+        subject = request.form["subject"].strip()
+        completed_hours = float(
+            request.form["completed_hours"]
+        )
 
-    subject = request.form["subject"]
+        if not subject or completed_hours <= 0:
+            return redirect(url_for("progress"))
 
-    completed_hours = float(
-        request.form["completed_hours"]
-    )
+    except (KeyError, ValueError):
+        return redirect(url_for("progress"))
 
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
-    # Planned hours
     cursor.execute("""
-        SELECT
-            SUM(days * daily_hours)
+        SELECT SUM(days * daily_hours)
         FROM study_plans
         WHERE subject = ?
     """, (subject,))
 
-    planned_result = cursor.fetchone()[0]
+    planned = cursor.fetchone()[0] or 0
 
-    planned = planned_result or 0
-
-    # Completed hours
     cursor.execute("""
-        SELECT
-            SUM(completed_hours)
+        SELECT SUM(completed_hours)
         FROM study_progress
         WHERE subject = ?
     """, (subject,))
 
-    completed_result = cursor.fetchone()[0]
+    completed = cursor.fetchone()[0] or 0
 
-    completed = completed_result or 0
+    remaining = max(planned - completed, 0)
 
-    remaining = planned - completed
-
-    # Prevent invalid negative values
-    if completed_hours <= 0:
-
-        conn.close()
-
-        return redirect(
-            url_for("progress")
-        )
-
-    # Prevent exceeding planned hours
     if completed_hours > remaining:
-
         conn.close()
 
         return render_template(
@@ -945,7 +840,9 @@ def add_progress():
             remaining=remaining
         )
 
-    # Save progress
+    timestamp = datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
     today = date.today().isoformat()
 
     cursor.execute("""
@@ -961,131 +858,31 @@ def add_progress():
         subject,
         planned,
         completed_hours,
-        today
+        timestamp
     ))
 
-    # Save study date
     cursor.execute("""
         INSERT OR IGNORE INTO study_dates
-        (
-            study_date
-        )
+        (study_date)
         VALUES (?)
     """, (today,))
 
     conn.commit()
     conn.close()
 
-    return redirect(
-        url_for("progress")
-    )
+    return redirect(url_for("progress"))
 
 
-# ==================================================
+# ============================================================
 # GOALS PAGE
-# ==================================================
+# ============================================================
 
 @app.route("/goals")
 def goals():
-
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT
-            id,
-            goal,
-            target_hours,
-            completed_hours,
-            deadline,
-            status
-        FROM study_goals
-        ORDER BY id DESC
-    """)
-
-    rows = cursor.fetchall()
-
-    goals_data = []
-
-    for row in rows:
-
-        goal_id = row[0]
-        goal_name = row[1]
-        target = row[2]
-        completed = row[3]
-        deadline = row[4]
-        status = row[5]
-
-        remaining = max(
-            target - completed,
-            0
-        )
-
-        recommendation = (
-            get_goal_recommendation(
-                target,
-                completed,
-                deadline,
-                status
-            )
-        )
-
-        deadline_status = (
-            get_deadline_status(
-                deadline,
-                status
-            )
-        )
-
-        if target > 0:
-
-            percentage = (
-                completed /
-                target
-            ) * 100
-
-        else:
-
-            percentage = 0
-
-        percentage = min(
-            percentage,
-            100
-        )
-
-        goals_data.append({
-
-            "id": goal_id,
-
-            "goal": goal_name,
-
-            "target_hours": target,
-
-            "completed_hours": completed,
-
-            "remaining_hours": remaining,
-
-            "deadline": deadline,
-
-            "status": status,
-
-            "deadline_status":
-                deadline_status,
-
-            "days_left":
-                recommendation["days_left"],
-
-            "daily_hours":
-                recommendation["daily_hours"],
-
-            "recommendation":
-                recommendation["recommendation"],
-
-            "percentage": percentage,
-
-            "progress": percentage
-        })
+    goals_data = get_goals_data(cursor)
 
     conn.close()
 
@@ -1095,26 +892,26 @@ def goals():
     )
 
 
-# ==================================================
+# ============================================================
 # ADD GOAL
-# ==================================================
+# ============================================================
 
-@app.route(
-    "/add-goal",
-    methods=["POST"]
-)
+@app.route("/add-goal", methods=["POST"])
 def add_goal():
+    try:
+        goal = request.form["goal"].strip()
+        target_hours = float(
+            request.form["target_hours"]
+        )
+        deadline = request.form.get("deadline", "").strip()
 
-    goal = request.form["goal"]
+        if not goal or target_hours <= 0:
+            return redirect(url_for("goals"))
 
-    target_hours = float(
-        request.form["target_hours"]
-    )
-
-    deadline = request.form["deadline"]
+    except (KeyError, ValueError):
+        return redirect(url_for("goals"))
 
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -1136,41 +933,28 @@ def add_goal():
     conn.commit()
     conn.close()
 
-    return redirect(
-        url_for("goals")
-    )
+    return redirect(url_for("goals"))
 
 
-# ==================================================
+# ============================================================
 # ADD GOAL PROGRESS
-# ==================================================
+# ============================================================
 
-@app.route(
-    "/add-goal-progress",
-    methods=["POST"]
-)
+@app.route("/add-goal-progress", methods=["POST"])
 def add_goal_progress():
+    goal_id = request.form.get("goal_id")
 
-    goal_id = request.form.get(
-        "goal_id"
-    )
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
 
-    # Compatibility with older HTML
     if goal_id:
-
-        goal_id = int(goal_id)
-
+        try:
+            goal_id = int(goal_id)
+        except ValueError:
+            conn.close()
+            return redirect(url_for("goals"))
     else:
-
-        goal_name = request.form.get(
-            "goal"
-        )
-
-        conn = sqlite3.connect(
-            DATABASE
-        )
-
-        cursor = conn.cursor()
+        goal_name = request.form.get("goal", "").strip()
 
         cursor.execute("""
             SELECT id
@@ -1180,33 +964,25 @@ def add_goal_progress():
             LIMIT 1
         """, (goal_name,))
 
-        result = cursor.fetchone()
+        row = cursor.fetchone()
 
-        if result is None:
-
+        if not row:
             conn.close()
+            return redirect(url_for("goals"))
 
-            return redirect(
-                url_for("goals")
-            )
+        goal_id = row[0]
 
-        goal_id = result[0]
-
-        conn.close()
-
-    hours = float(
-        request.form["completed_hours"]
-    )
-
-    if hours <= 0:
-
-        return redirect(
-            url_for("goals")
+    try:
+        hours = float(
+            request.form["completed_hours"]
         )
 
-    conn = sqlite3.connect(DATABASE)
+        if hours <= 0:
+            raise ValueError
 
-    cursor = conn.cursor()
+    except (KeyError, ValueError):
+        conn.close()
+        return redirect(url_for("goals"))
 
     cursor.execute("""
         SELECT
@@ -1217,56 +993,29 @@ def add_goal_progress():
         WHERE id = ?
     """, (goal_id,))
 
-    result = cursor.fetchone()
+    row = cursor.fetchone()
 
-    if result is None:
-
+    if not row:
         conn.close()
+        return redirect(url_for("goals"))
 
-        return redirect(
-            url_for("goals")
-        )
+    target = row[0] or 0
+    completed = row[1] or 0
+    status = row[2]
 
-    target = result[0]
-    completed = result[1]
-    status = result[2]
+    remaining = max(target - completed, 0)
 
-    remaining = (
-        target - completed
-    )
-
-    # Completed goal
-    if status == "Completed":
-
+    if status == "Completed" or hours > remaining:
         conn.close()
+        return redirect(url_for("goals"))
 
-        return redirect(
-            url_for("goals")
-        )
-
-    # Prevent exceeding target
-    if hours > remaining:
-
-        conn.close()
-
-        return redirect(
-            url_for("goals")
-        )
-
-    new_completed = (
-        completed + hours
-    )
+    new_completed = completed + hours
 
     if new_completed >= target:
-
         new_status = "Completed"
-
     elif new_completed > 0:
-
         new_status = "In Progress"
-
     else:
-
         new_status = "Pending"
 
     cursor.execute("""
@@ -1284,295 +1033,556 @@ def add_goal_progress():
     conn.commit()
     conn.close()
 
-    return redirect(
-        url_for("goals")
-    )
+    return redirect(url_for("goals"))
 
 
-# ==================================================
-# SUBJECT-WISE ANALYTICS
-# STEP 74
-# ==================================================
+# ============================================================
+# ANALYTICS - STEP 74/75
+# ============================================================
 
 @app.route("/analytics")
 def analytics():
-
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
-    # --------------------------------------------------
-    # GET ALL SUBJECTS
-    # --------------------------------------------------
+    subjects = get_subject_data(cursor)
 
-    cursor.execute("""
-        SELECT DISTINCT subject
-        FROM study_plans
-        ORDER BY subject
-    """)
+    planned_total = sum(
+        item["planned"] for item in subjects
+    )
 
-    subject_rows = cursor.fetchall()
+    completed_total = sum(
+        item["completed"] for item in subjects
+    )
 
-    analytics_data = []
+    remaining_total = max(
+        planned_total - completed_total,
+        0
+    )
 
-    for row in subject_rows:
+    overall_percentage = safe_percentage(
+        completed_total,
+        planned_total
+    )
 
-        subject = row[0]
+    on_track = sum(
+        1 for item in subjects
+        if item["status"] == "On Track"
+    )
 
-        # Planned hours
-        cursor.execute("""
-            SELECT
-                SUM(days * daily_hours)
-            FROM study_plans
-            WHERE subject = ?
-        """, (subject,))
+    needs_attention = sum(
+        1 for item in subjects
+        if item["status"] == "Needs Attention"
+    )
 
-        planned_result = cursor.fetchone()[0]
+    behind = sum(
+        1 for item in subjects
+        if item["status"] == "Behind"
+    )
 
-        planned = planned_result or 0
+    not_started = sum(
+        1 for item in subjects
+        if item["status"] == "Not Started"
+    )
 
-        # Completed hours
-        cursor.execute("""
-            SELECT
-                SUM(completed_hours)
-            FROM study_progress
-            WHERE subject = ?
-        """, (subject,))
+    most_planned = (
+        max(subjects, key=lambda x: x["planned"])
+        if subjects else None
+    )
 
-        completed_result = cursor.fetchone()[0]
+    most_completed = (
+        max(subjects, key=lambda x: x["completed"])
+        if subjects else None
+    )
 
-        completed = completed_result or 0
-
-        # Remaining hours
-        remaining = max(
-            planned - completed,
-            0
-        )
-
-        # Percentage
-        if planned > 0:
-
-            percentage = (
-                completed /
-                planned
-            ) * 100
-
-        else:
-
-            percentage = 0
-
-        percentage = min(
-            percentage,
-            100
-        )
-
-        analytics_data.append({
-
-            "subject": subject,
-
-            "planned": planned,
-
-            "completed": completed,
-
-            "remaining": remaining,
-
-            "percentage": percentage
-        })
+    most_remaining = (
+        max(subjects, key=lambda x: x["remaining"])
+        if subjects else None
+    )
 
     conn.close()
 
-    # --------------------------------------------------
-    # ANALYTICS INSIGHTS
-    # --------------------------------------------------
-
-    total_planned = sum(
-        item["planned"]
-        for item in analytics_data
-    )
-
-    total_completed = sum(
-        item["completed"]
-        for item in analytics_data
-    )
-
-    total_remaining = sum(
-        item["remaining"]
-        for item in analytics_data
-    )
-
-    if total_planned > 0:
-
-        overall_percentage = (
-            total_completed /
-            total_planned
-        ) * 100
-
-    else:
-
-        overall_percentage = 0
-
-    overall_percentage = min(
-        overall_percentage,
-        100
-    )
-
-    if analytics_data:
-
-        most_planned = max(
-            analytics_data,
-            key=lambda item: item["planned"]
-        )
-
-        most_completed = max(
-            analytics_data,
-            key=lambda item: item["completed"]
-        )
-
-        most_remaining = max(
-            analytics_data,
-            key=lambda item: item["remaining"]
-        )
-
-    else:
-
-        most_planned = None
-        most_completed = None
-        most_remaining = None
-
     return render_template(
         "analytics.html",
-        subjects=analytics_data,
-        total_planned=total_planned,
-        total_completed=total_completed,
-        total_remaining=total_remaining,
+        subjects=subjects,
+        planned_total=planned_total,
+        completed_total=completed_total,
+        remaining_total=remaining_total,
         overall_percentage=overall_percentage,
+        overall_progress=overall_percentage,
+        on_track=on_track,
+        needs_attention=needs_attention,
+        behind=behind,
+        not_started=not_started,
         most_planned=most_planned,
         most_completed=most_completed,
         most_remaining=most_remaining
     )
 
 
-# ==================================================
-# STUDY CALENDAR
-# ==================================================
+# ============================================================
+# WEEKLY PERFORMANCE - STEP 76
+# ============================================================
+
+@app.route("/weekly-performance")
+def weekly_performance():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    today = date.today()
+    start_date = today - timedelta(days=6)
+
+    weekly_data = []
+
+    for i in range(7):
+        current_date = start_date + timedelta(days=i)
+        date_string = current_date.isoformat()
+
+        cursor.execute("""
+            SELECT SUM(completed_hours)
+            FROM study_progress
+            WHERE DATE(added_at) = ?
+        """, (date_string,))
+
+        hours = cursor.fetchone()[0] or 0
+
+        weekly_data.append({
+            "date": current_date,
+            "day": current_date.strftime("%a"),
+            "hours": hours
+        })
+
+    conn.close()
+
+    total_hours = sum(
+        item["hours"] for item in weekly_data
+    )
+
+    daily_average = total_hours / 7
+    study_days = sum(
+        1 for item in weekly_data
+        if item["hours"] > 0
+    )
+
+    most_productive = (
+        max(weekly_data, key=lambda item: item["hours"])
+        if study_days > 0 else None
+    )
+
+    max_hours = max(
+        [item["hours"] for item in weekly_data] or [0]
+    )
+
+    for item in weekly_data:
+        if max_hours > 0:
+            item["bar_height"] = max(
+                (item["hours"] / max_hours) * 100,
+                4 if item["hours"] > 0 else 0
+            )
+        else:
+            item["bar_height"] = 0
+
+    return render_template(
+        "weekly_performance.html",
+        weekly_data=weekly_data,
+        total_hours=total_hours,
+        daily_average=daily_average,
+        study_days=study_days,
+        most_productive=most_productive
+    )
+
+
+# ============================================================
+# STEP 77 - STUDY PERFORMANCE INSIGHTS
+# ============================================================
+
+@app.route("/insights")
+def insights():
+    today = date.today()
+    start_date = today - timedelta(days=13)
+
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    daily_data = []
+
+    for i in range(14):
+        current_date = start_date + timedelta(days=i)
+
+        cursor.execute("""
+            SELECT SUM(completed_hours)
+            FROM study_progress
+            WHERE DATE(added_at) = ?
+        """, (current_date.isoformat(),))
+
+        hours = cursor.fetchone()[0] or 0
+
+        daily_data.append({
+            "date": current_date,
+            "day": current_date.strftime("%a"),
+            "hours": hours
+        })
+
+    # Subject totals.
+    subjects = get_subject_data(cursor)
+
+    # Goals.
+    goals_data = get_goals_data(cursor)
+
+    conn.close()
+
+    first_week = sum(
+        item["hours"] for item in daily_data[:7]
+    )
+
+    second_week = sum(
+        item["hours"] for item in daily_data[7:]
+    )
+
+    if second_week > first_week:
+        trend = "Increasing"
+        trend_message = (
+            "📈 Your study time is increasing compared with the previous week."
+        )
+    elif second_week < first_week:
+        trend = "Decreasing"
+        trend_message = (
+            "📉 Your study time is lower than the previous week."
+        )
+    else:
+        trend = "Stable"
+        trend_message = (
+            "➡️ Your study time is stable compared with the previous week."
+        )
+
+    productive_day = (
+        max(daily_data, key=lambda item: item["hours"])
+        if daily_data else None
+    )
+
+    total_hours = sum(
+        item["hours"] for item in daily_data
+    )
+
+    average = total_hours / 14
+
+    if productive_day and productive_day["hours"] > 0:
+        day_message = (
+            f"🔥 {productive_day['date'].strftime('%A')} was your "
+            f"most productive day with {productive_day['hours']:.1f} hours."
+        )
+    else:
+        day_message = "📚 No study sessions have been recorded in the last 14 days."
+
+    if second_week > 0:
+        suggestion = (
+            "💡 Keep your recent momentum and try to study consistently "
+            "rather than relying on one long session."
+        )
+    elif first_week > 0:
+        suggestion = (
+            "💡 Try to restart your study routine with a small daily session."
+        )
+    else:
+        suggestion = (
+            "💡 Add your first progress session to start generating insights."
+        )
+
+    return render_template(
+        "insights.html",
+        daily_data=daily_data,
+        subjects=subjects,
+        goals=goals_data,
+        total_hours=total_hours,
+        average=average,
+        first_week=first_week,
+        second_week=second_week,
+        trend=trend,
+        trend_message=trend_message,
+        productive_day=productive_day,
+        day_message=day_message,
+        suggestion=suggestion
+    )
+
+
+# ============================================================
+# STEP 78 - SUBJECT-WISE INSIGHTS
+# ============================================================
+
+@app.route("/subject-insights")
+def subject_insights():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    subjects = get_subject_data(cursor)
+
+    conn.close()
+
+    total_completed = sum(
+        item["completed"] for item in subjects
+    )
+
+    for subject in subjects:
+        if total_completed > 0:
+            subject["share"] = (
+                subject["completed"] /
+                total_completed
+            ) * 100
+        else:
+            subject["share"] = 0
+
+    most_studied = (
+        max(subjects, key=lambda x: x["completed"])
+        if subjects else None
+    )
+
+    most_remaining = (
+        max(subjects, key=lambda x: x["remaining"])
+        if subjects else None
+    )
+
+    attention_subjects = [
+        item for item in subjects
+        if item["status"] in
+        ("Needs Attention", "Behind", "Not Started")
+    ]
+
+    return render_template(
+        "subject_insights.html",
+        subjects=subjects,
+        most_studied=most_studied,
+        most_remaining=most_remaining,
+        attention_subjects=attention_subjects,
+        total_completed=total_completed
+    )
+
+
+# ============================================================
+# STEP 79 - GOAL PERFORMANCE INSIGHTS
+# ============================================================
+
+@app.route("/goal-insights")
+def goal_insights():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    goals_data = get_goals_data(cursor)
+
+    conn.close()
+
+    total_goals = len(goals_data)
+
+    completed_count = sum(
+        1 for goal in goals_data
+        if goal["status"] == "Completed"
+    )
+
+    active_count = total_goals - completed_count
+
+    average_progress = (
+        sum(goal["percentage"] for goal in goals_data) /
+        total_goals
+        if total_goals else 0
+    )
+
+    overdue = [
+        goal for goal in goals_data
+        if goal["deadline_status"] == "Overdue"
+        and goal["status"] != "Completed"
+    ]
+
+    nearest = [
+        goal for goal in goals_data
+        if goal["status"] != "Completed"
+        and goal["days_left"] is not None
+        and goal["days_left"] >= 0
+    ]
+
+    nearest_goal = (
+        min(nearest, key=lambda x: x["days_left"])
+        if nearest else None
+    )
+
+    if completed_count > 0:
+        summary = (
+            f"🏆 You have completed {completed_count} of "
+            f"{total_goals} goals."
+        )
+    elif total_goals > 0:
+        summary = (
+            "🎯 Keep working on your goals and update progress regularly."
+        )
+    else:
+        summary = (
+            "📚 Create your first goal to start tracking goal performance."
+        )
+
+    return render_template(
+        "goal_insights.html",
+        goals=goals_data,
+        total_goals=total_goals,
+        completed_count=completed_count,
+        active_count=active_count,
+        average_progress=average_progress,
+        overdue=overdue,
+        nearest_goal=nearest_goal,
+        summary=summary
+    )
+
+
+# ============================================================
+# STEP 80 - CALENDAR WITH MONTH NAVIGATION
+# ============================================================
 
 @app.route("/calendar")
 def calendar():
+    today = date.today()
+
+    try:
+        year = int(request.args.get("year", today.year))
+        month = int(request.args.get("month", today.month))
+
+        if month < 1:
+            month = 12
+            year -= 1
+        elif month > 12:
+            month = 1
+            year += 1
+
+    except ValueError:
+        year = today.year
+        month = today.month
 
     conn = sqlite3.connect(DATABASE)
-
     cursor = conn.cursor()
 
     cursor.execute("""
         SELECT study_date
         FROM study_dates
-        ORDER BY study_date
     """)
-
-    rows = cursor.fetchall()
-
-    conn.close()
 
     study_dates = set()
 
-    for row in rows:
-
+    for row in cursor.fetchall():
         try:
-
             study_dates.add(
                 date.fromisoformat(row[0])
             )
-
         except (ValueError, TypeError):
+            pass
 
-            continue
+    conn.close()
 
-    # Current month
-    today = date.today()
-
-    year = today.year
-    month = today.month
-
-    # First day
-    first_day = date(
-        year,
-        month,
-        1
-    )
-
-    # Weekday
-    start_weekday = (
-        first_day.weekday()
-    )
-
-    # Number of days
-    if month == 12:
-
-        next_month = date(
-            year + 1,
-            1,
-            1
-        )
-
-    else:
-
-        next_month = date(
-            year,
-            month + 1,
-            1
-        )
-
-    days_in_month = (
-        next_month - first_day
-    ).days
+    first_day = date(year, month, 1)
+    days_in_month = pycalendar.monthrange(year, month)[1]
+    start_weekday = first_day.weekday()
 
     calendar_days = []
 
-    # Empty cells
     for _ in range(start_weekday):
-
         calendar_days.append(None)
 
-    # Actual days
-    for day_number in range(
-        1,
-        days_in_month + 1
-    ):
-
-        current_date = date(
-            year,
-            month,
-            day_number
-        )
+    for day_number in range(1, days_in_month + 1):
+        current = date(year, month, day_number)
 
         calendar_days.append({
-
             "day": day_number,
-
-            "date":
-                current_date.isoformat(),
-
-            "studied":
-                current_date in study_dates,
-
-            "today":
-                current_date == today
+            "date": current.isoformat(),
+            "studied": current in study_dates,
+            "today": current == today
         })
+
+    if month == 1:
+        previous_year = year - 1
+        previous_month = 12
+    else:
+        previous_year = year
+        previous_month = month - 1
+
+    if month == 12:
+        next_year = year + 1
+        next_month = 1
+    else:
+        next_year = year
+        next_month = month + 1
 
     return render_template(
         "calendar.html",
         calendar_days=calendar_days,
         month_name=first_day.strftime("%B"),
-        year=year
+        year=year,
+        month=month,
+        previous_year=previous_year,
+        previous_month=previous_month,
+        next_year=next_year,
+        next_month=next_month,
+        studied_days=sum(
+            1 for day in calendar_days
+            if day and day["studied"]
+        )
     )
 
 
-# ==================================================
-# START APPLICATION
-# ==================================================
+# ============================================================
+# STEP 81 - DEADLINE REMINDERS
+# ============================================================
+
+@app.route("/reminders")
+def reminders():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    goals_data = get_goals_data(cursor)
+
+    conn.close()
+
+    reminders_data = []
+
+    for goal in goals_data:
+        if goal["status"] == "Completed":
+            continue
+
+        status = goal["deadline_status"]
+
+        if status in (
+            "Overdue",
+            "Due Today",
+            "Due Soon"
+        ):
+            reminders_data.append(goal)
+
+    reminders_data.sort(
+        key=lambda item: (
+            item["days_left"]
+            if item["days_left"] is not None
+            else 999999
+        )
+    )
+
+    if not reminders_data:
+        message = (
+            "✅ No urgent deadline reminders right now. "
+            "Keep following your study schedule!"
+        )
+    else:
+        message = (
+            f"🔔 You have {len(reminders_data)} "
+            f"deadline reminder(s) to check."
+        )
+
+    return render_template(
+        "reminders.html",
+        reminders=reminders_data,
+        goals=goals_data,
+        message=message
+    )
+
+
+# ============================================================
+# RUN APPLICATION
+# ============================================================
 
 if __name__ == "__main__":
-
     setup_database()
 
     app.run(

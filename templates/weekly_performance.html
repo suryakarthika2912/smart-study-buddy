@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Weekly Study Performance</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+
+
+<body>
+
+<div class="container">
+
+
+    <!-- Navigation -->
+
+    <nav>
+
+        <a href="/">Dashboard</a>
+
+        <a href="/plans">Study Plans</a>
+
+        <a href="/progress">Progress</a>
+
+        <a href="/goals">Goals</a>
+
+        <a href="/calendar">Calendar</a>
+
+        <a href="/analytics">Analytics</a>
+
+        <a href="/weekly-performance">
+            Weekly Performance
+        </a>
+
+    </nav>
+
+
+    <!-- Header -->
+
+    <div class="page-header">
+
+        <h1>📊 Weekly Study Performance</h1>
+
+        <p>
+            Track your study activity over the last
+            7 days.
+        </p>
+
+    </div>
+
+
+    <!-- Summary -->
+
+    <div class="summary-grid">
+
+
+        <div class="summary-card">
+
+            <h3>⏱️ Total Studied</h3>
+
+            <p>
+                {{ "%.1f"|format(total_hours) }} hrs
+            </p>
+
+        </div>
+
+
+        <div class="summary-card">
+
+            <h3>📈 Daily Average</h3>
+
+            <p>
+                {{ "%.1f"|format(daily_average) }} hrs
+            </p>
+
+        </div>
+
+
+        <div class="summary-card">
+
+            <h3>🔥 Study Days</h3>
+
+            <p>
+                {{ study_days }}/7
+            </p>
+
+        </div>
+
+
+        <div class="summary-card">
+
+            <h3>🏆 Most Productive</h3>
+
+            <p>
+
+                {% if most_productive %}
+
+                    {{ most_productive.day }}
+
+                {% else %}
+
+                    None
+
+                {% endif %}
+
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <!-- Weekly Chart -->
+
+    <div class="performance-section">
+
+        <h2>📅 Last 7 Days</h2>
+
+
+        <div class="weekly-chart">
+
+
+            {% for item in weekly_data %}
+
+            <div class="day-column">
+
+
+                <div class="bar-area">
+
+
+                    {% if total_hours > 0 %}
+
+                        {% set bar_height =
+                            (item.hours / total_hours) * 100 %}
+
+                    {% else %}
+
+                        {% set bar_height = 0 %}
+
+                    {% endif %}
+
+
+                    <div class="study-bar"
+                         style="height: {{ bar_height }}%;">
+
+                    </div>
+
+                </div>
+
+
+                <div class="day-hours">
+
+                    {{ "%.1f"|format(item.hours) }}h
+
+                </div>
+
+
+                <div class="day-name">
+
+                    {{ item.day }}
+
+                </div>
+
+
+                <div class="day-date">
+
+                    {{ item.date.strftime("%d %b") }}
+
+                </div>
+
+
+            </div>
+
+            {% endfor %}
+
+
+        </div>
+
+    </div>
+
+
+    <!-- Daily Details -->
+
+    <div class="performance-section">
+
+        <h2>📋 Daily Details</h2>
+
+
+        <div class="daily-list">
+
+
+            {% for item in weekly_data %}
+
+            <div class="daily-row">
+
+
+                <div>
+
+                    <strong>
+                        {{ item.day }}
+                    </strong>
+
+                    <span>
+                        {{ item.date.strftime("%d %B %Y") }}
+                    </span>
+
+                </div>
+
+
+                <div class="daily-hours">
+
+                    {% if item.hours > 0 %}
+
+                        🔥
+                        {{ "%.1f"|format(item.hours) }}
+                        hours
+
+                    {% else %}
+
+                        — No study recorded
+
+                    {% endif %}
+
+                </div>
+
+
+            </div>
+
+            {% endfor %}
+
+
+        </div>
+
+    </div>
+
+
+    <!-- Productivity Message -->
+
+    <div class="performance-section">
+
+
+        {% if study_days == 7 %}
+
+            <div class="message-card">
+
+                🔥 Amazing consistency!
+                You studied every day this week.
+
+            </div>
+
+
+        {% elif study_days >= 5 %}
+
+            <div class="message-card">
+
+                💪 Great consistency!
+                You studied {{ study_days }} days this week.
+
+            </div>
+
+
+        {% elif study_days >= 3 %}
+
+            <div class="message-card">
+
+                📚 Good start!
+                Try to build a more consistent study routine.
+
+            </div>
+
+
+        {% elif study_days > 0 %}
+
+            <div class="message-card">
+
+                🌱 You have started.
+                Try to add more study days next week.
+
+            </div>
+
+
+        {% else %}
+
+            <div class="message-card">
+
+                🎯 No study sessions recorded this week yet.
+                Start with a small session today.
+
+            </div>
+
+        {% endif %}
+
+
+    </div>
+
+
+</div>
+
+
+<style>
+
+
+    .performance-section {
+
+        margin-top: 30px;
+
+    }
+
+
+    .summary-grid {
+
+        display: grid;
+
+        grid-template-columns:
+            repeat(auto-fit, minmax(180px, 1fr));
+
+        gap: 20px;
+
+        margin-top: 20px;
+
+    }
+
+
+    .summary-card {
+
+        padding: 20px;
+
+        border-radius: 14px;
+
+        background: #ffffff;
+
+        box-shadow:
+            0 4px 15px rgba(0, 0, 0, 0.08);
+
+        text-align: center;
+
+    }
+
+
+    .summary-card h3 {
+
+        margin-bottom: 10px;
+
+    }
+
+
+    .summary-card p {
+
+        font-size: 26px;
+
+        font-weight: bold;
+
+        margin: 0;
+
+    }
+
+
+    .weekly-chart {
+
+        display: flex;
+
+        align-items: flex-end;
+
+        justify-content: space-between;
+
+        gap: 12px;
+
+        height: 300px;
+
+        padding: 25px;
+
+        margin-top: 20px;
+
+        background: #ffffff;
+
+        border-radius: 15px;
+
+        box-shadow:
+            0 4px 15px rgba(0, 0, 0, 0.08);
+
+    }
+
+
+    .day-column {
+
+        flex: 1;
+
+        height: 100%;
+
+        display: flex;
+
+        flex-direction: column;
+
+        justify-content: flex-end;
+
+        align-items: center;
+
+    }
+
+
+    .bar-area {
+
+        height: 200px;
+
+        width: 100%;
+
+        display: flex;
+
+        align-items: flex-end;
+
+        justify-content: center;
+
+    }
+
+
+    .study-bar {
+
+        width: 45px;
+
+        min-height: 3px;
+
+        background: #6c63ff;
+
+        border-radius: 8px 8px 0 0;
+
+        transition: height 0.3s ease;
+
+    }
+
+
+    .day-hours {
+
+        margin-top: 8px;
+
+        font-weight: bold;
+
+        font-size: 13px;
+
+    }
+
+
+    .day-name {
+
+        margin-top: 5px;
+
+        font-weight: bold;
+
+    }
+
+
+    .day-date {
+
+        margin-top: 3px;
+
+        font-size: 12px;
+
+        opacity: 0.7;
+
+    }
+
+
+    .daily-list {
+
+        margin-top: 20px;
+
+        background: #ffffff;
+
+        border-radius: 15px;
+
+        overflow: hidden;
+
+        box-shadow:
+            0 4px 15px rgba(0, 0, 0, 0.08);
+
+    }
+
+
+    .daily-row {
+
+        display: flex;
+
+        justify-content: space-between;
+
+        align-items: center;
+
+        padding: 18px 20px;
+
+        border-bottom: 1px solid #eeeeee;
+
+    }
+
+
+    .daily-row:last-child {
+
+        border-bottom: none;
+
+    }
+
+
+    .daily-row strong {
+
+        display: block;
+
+        font-size: 16px;
+
+    }
+
+
+    .daily-row span {
+
+        display: block;
+
+        font-size: 13px;
+
+        opacity: 0.7;
+
+        margin-top: 4px;
+
+    }
+
+
+    .daily-hours {
+
+        font-weight: bold;
+
+    }
+
+
+    .message-card {
+
+        padding: 20px;
+
+        border-radius: 14px;
+
+        background: #ffffff;
+
+        box-shadow:
+            0 4px 15px rgba(0, 0, 0, 0.08);
+
+        text-align: center;
+
+        font-size: 16px;
+
+        font-weight: bold;
+
+    }
+
+
+    @media (max-width: 600px) {
+
+        .weekly-chart {
+
+            gap: 5px;
+
+            padding: 15px;
+
+        }
+
+
+        .study-bar {
+
+            width: 25px;
+
+        }
+
+
+        .daily-row {
+
+            flex-direction: column;
+
+            align-items: flex-start;
+
+            gap: 10px;
+
+        }
+
+    }
+
+</style>
+
+
+</body>
+
+</html>
