@@ -1040,6 +1040,10 @@ def add_goal_progress():
 # ANALYTICS - STEP 74/75
 # ============================================================
 
+# ============================================================
+# ANALYTICS
+# ============================================================
+
 @app.route("/analytics")
 def analytics():
     conn = sqlite3.connect(DATABASE)
@@ -1047,57 +1051,42 @@ def analytics():
 
     subjects = get_subject_data(cursor)
 
-    planned_total = sum(
-        item["planned"] for item in subjects
-    )
-
-    completed_total = sum(
-        item["completed"] for item in subjects
-    )
-
-    remaining_total = max(
-        planned_total - completed_total,
-        0
-    )
+    total_planned = sum(s["planned"] for s in subjects)
+    total_completed = sum(s["completed"] for s in subjects)
+    total_remaining = max(total_planned - total_completed, 0)
 
     overall_percentage = safe_percentage(
-        completed_total,
-        planned_total
+        total_completed, total_planned
     )
 
-    on_track = sum(
-        1 for item in subjects
-        if item["status"] == "On Track"
-    )
+    status_counts = {
+        "On Track": sum(
+            s["status"] == "On Track" for s in subjects
+        ),
+        "Needs Attention": sum(
+            s["status"] == "Needs Attention" for s in subjects
+        ),
+        "Behind": sum(
+            s["status"] == "Behind" for s in subjects
+        ),
+        "Not Started": sum(
+            s["status"] == "Not Started" for s in subjects
+        )
+    }
 
-    needs_attention = sum(
-        1 for item in subjects
-        if item["status"] == "Needs Attention"
-    )
+    for subject in subjects:
+        subject["status_class"] = (
+            subject["status"].lower().replace(" ", "-")
+        )
 
-    behind = sum(
-        1 for item in subjects
-        if item["status"] == "Behind"
+    most_planned = max(
+        subjects, key=lambda s: s["planned"], default=None
     )
-
-    not_started = sum(
-        1 for item in subjects
-        if item["status"] == "Not Started"
+    most_completed = max(
+        subjects, key=lambda s: s["completed"], default=None
     )
-
-    most_planned = (
-        max(subjects, key=lambda x: x["planned"])
-        if subjects else None
-    )
-
-    most_completed = (
-        max(subjects, key=lambda x: x["completed"])
-        if subjects else None
-    )
-
-    most_remaining = (
-        max(subjects, key=lambda x: x["remaining"])
-        if subjects else None
+    most_remaining = max(
+        subjects, key=lambda s: s["remaining"], default=None
     )
 
     conn.close()
@@ -1105,15 +1094,28 @@ def analytics():
     return render_template(
         "analytics.html",
         subjects=subjects,
-        planned_total=planned_total,
-        completed_total=completed_total,
-        remaining_total=remaining_total,
+
+        # Names used by the uploaded template
+        total_planned=total_planned,
+        total_completed=total_completed,
+        total_remaining=total_remaining,
         overall_percentage=overall_percentage,
+        on_track_count=status_counts["On Track"],
+        needs_attention_count=status_counts["Needs Attention"],
+        behind_count=status_counts["Behind"],
+        not_started_count=status_counts["Not Started"],
+
+        # Compatibility with the previous Python route
+        planned_total=total_planned,
+        completed_total=total_completed,
+        remaining_total=total_remaining,
         overall_progress=overall_percentage,
-        on_track=on_track,
-        needs_attention=needs_attention,
-        behind=behind,
-        not_started=not_started,
+        on_track=status_counts["On Track"],
+        needs_attention=status_counts["Needs Attention"],
+        behind=status_counts["Behind"],
+        not_started=status_counts["Not Started"],
+
+        status_counts=status_counts,
         most_planned=most_planned,
         most_completed=most_completed,
         most_remaining=most_remaining
@@ -1121,79 +1123,7 @@ def analytics():
 
 
 # ============================================================
-# WEEKLY PERFORMANCE - STEP 76
-# ============================================================
-
-@app.route("/weekly-performance")
-def weekly_performance():
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-
-    today = date.today()
-    start_date = today - timedelta(days=6)
-
-    weekly_data = []
-
-    for i in range(7):
-        current_date = start_date + timedelta(days=i)
-        date_string = current_date.isoformat()
-
-        cursor.execute("""
-            SELECT SUM(completed_hours)
-            FROM study_progress
-            WHERE DATE(added_at) = ?
-        """, (date_string,))
-
-        hours = cursor.fetchone()[0] or 0
-
-        weekly_data.append({
-            "date": current_date,
-            "day": current_date.strftime("%a"),
-            "hours": hours
-        })
-
-    conn.close()
-
-    total_hours = sum(
-        item["hours"] for item in weekly_data
-    )
-
-    daily_average = total_hours / 7
-    study_days = sum(
-        1 for item in weekly_data
-        if item["hours"] > 0
-    )
-
-    most_productive = (
-        max(weekly_data, key=lambda item: item["hours"])
-        if study_days > 0 else None
-    )
-
-    max_hours = max(
-        [item["hours"] for item in weekly_data] or [0]
-    )
-
-    for item in weekly_data:
-        if max_hours > 0:
-            item["bar_height"] = max(
-                (item["hours"] / max_hours) * 100,
-                4 if item["hours"] > 0 else 0
-            )
-        else:
-            item["bar_height"] = 0
-
-    return render_template(
-        "weekly_performance.html",
-        weekly_data=weekly_data,
-        total_hours=total_hours,
-        daily_average=daily_average,
-        study_days=study_days,
-        most_productive=most_productive
-    )
-
-
-# ============================================================
-# STEP 77 - STUDY PERFORMANCE INSIGHTS
+# STUDY INSIGHTS
 # ============================================================
 
 @app.route("/insights")
@@ -1210,7 +1140,7 @@ def insights():
         current_date = start_date + timedelta(days=i)
 
         cursor.execute("""
-            SELECT SUM(completed_hours)
+            SELECT COALESCE(SUM(completed_hours), 0)
             FROM study_progress
             WHERE DATE(added_at) = ?
         """, (current_date.isoformat(),))
@@ -1223,90 +1153,112 @@ def insights():
             "hours": hours
         })
 
-    # Subject totals.
     subjects = get_subject_data(cursor)
-
-    # Goals.
     goals_data = get_goals_data(cursor)
 
     conn.close()
 
-    first_week = sum(
-        item["hours"] for item in daily_data[:7]
-    )
+    first_week = sum(x["hours"] for x in daily_data[:7])
+    second_week = sum(x["hours"] for x in daily_data[7:])
 
-    second_week = sum(
-        item["hours"] for item in daily_data[7:]
-    )
+    total_hours = sum(x["hours"] for x in daily_data)
+    average = total_hours / 14
 
     if second_week > first_week:
         trend = "Increasing"
         trend_message = (
-            "📈 Your study time is increasing compared with the previous week."
+            "Your study time is increasing compared with the previous week."
         )
     elif second_week < first_week:
         trend = "Decreasing"
         trend_message = (
-            "📉 Your study time is lower than the previous week."
+            "Your study time is lower than the previous week."
         )
     else:
         trend = "Stable"
         trend_message = (
-            "➡️ Your study time is stable compared with the previous week."
+            "Your study time is stable compared with the previous week."
         )
 
-    productive_day = (
-        max(daily_data, key=lambda item: item["hours"])
-        if daily_data else None
+    productive_day = max(
+        daily_data, key=lambda x: x["hours"], default=None
     )
 
-    total_hours = sum(
-        item["hours"] for item in daily_data
+    study_days = sum(
+        1 for x in daily_data[7:] if x["hours"] > 0
     )
 
-    average = total_hours / 14
+    top_subject = max(
+        subjects, key=lambda x: x["completed"], default=None
+    )
 
-    if productive_day and productive_day["hours"] > 0:
-        day_message = (
-            f"🔥 {productive_day['date'].strftime('%A')} was your "
-            f"most productive day with {productive_day['hours']:.1f} hours."
+    overdue_goals = [
+        g for g in goals_data
+        if g["status"] != "Completed"
+        and g["deadline_status"] == "Overdue"
+    ]
+
+    if overdue_goals:
+        suggestion = (
+            f"Prioritize the overdue goal: {overdue_goals[0]['goal']}."
+        )
+    elif total_hours == 0:
+        suggestion = (
+            "Record a study session to begin generating study insights."
+        )
+    elif study_days < 3:
+        suggestion = (
+            "Try spreading your study sessions across more days."
         )
     else:
-        day_message = "📚 No study sessions have been recorded in the last 14 days."
+        suggestion = (
+            "Keep updating your progress and maintain your study routine."
+        )
 
-    if second_week > 0:
-        suggestion = (
-            "💡 Keep your recent momentum and try to study consistently "
-            "rather than relying on one long session."
-        )
-    elif first_week > 0:
-        suggestion = (
-            "💡 Try to restart your study routine with a small daily session."
-        )
-    else:
-        suggestion = (
-            "💡 Add your first progress session to start generating insights."
-        )
+    day_message = (
+        f"{productive_day['date'].strftime('%A')} was your most productive "
+        f"day with {productive_day['hours']:.1f} hours."
+        if productive_day and productive_day["hours"] > 0
+        else "No study sessions have been recorded in the last 14 days."
+    )
+
+    # Compatibility aliases for different versions of insights.html
+    current_week = daily_data[7:]
+    previous_week = daily_data[:7]
+    current_total = second_week
+    previous_total = first_week
+    current_avg = second_week / 7
+    previous_avg = first_week / 7
+    most_productive = productive_day
 
     return render_template(
         "insights.html",
         daily_data=daily_data,
+        current_week=current_week,
+        previous_week=previous_week,
         subjects=subjects,
         goals=goals_data,
         total_hours=total_hours,
         average=average,
         first_week=first_week,
         second_week=second_week,
+        current_total=current_total,
+        previous_total=previous_total,
+        current_avg=current_avg,
+        previous_avg=previous_avg,
         trend=trend,
         trend_message=trend_message,
         productive_day=productive_day,
-        day_message=day_message,
-        suggestion=suggestion
+        most_productive=most_productive,
+        study_days=study_days,
+        top_subject=top_subject,
+        suggestion=suggestion,
+        day_message=day_message
     )
 
 
 # ============================================================
-# STEP 78 - SUBJECT-WISE INSIGHTS
+# SUBJECT INSIGHTS
 # ============================================================
 
 @app.route("/subject-insights")
@@ -1315,50 +1267,50 @@ def subject_insights():
     cursor = conn.cursor()
 
     subjects = get_subject_data(cursor)
-
     conn.close()
 
-    total_completed = sum(
-        item["completed"] for item in subjects
-    )
+    total_completed = sum(s["completed"] for s in subjects)
 
     for subject in subjects:
-        if total_completed > 0:
-            subject["share"] = (
-                subject["completed"] /
-                total_completed
-            ) * 100
-        else:
-            subject["share"] = 0
+        subject["share"] = (
+            subject["completed"] / total_completed * 100
+            if total_completed > 0 else 0
+        )
 
-    most_studied = (
-        max(subjects, key=lambda x: x["completed"])
-        if subjects else None
+    most_studied = max(
+        subjects, key=lambda s: s["completed"], default=None
     )
 
-    most_remaining = (
-        max(subjects, key=lambda x: x["remaining"])
-        if subjects else None
+    candidates = [
+        s for s in subjects if s["remaining"] > 0
+    ]
+
+    most_remaining = max(
+        candidates, key=lambda s: s["remaining"], default=None
     )
 
     attention_subjects = [
-        item for item in subjects
-        if item["status"] in
-        ("Needs Attention", "Behind", "Not Started")
+        s for s in subjects
+        if s["status"] in (
+            "Needs Attention", "Behind", "Not Started"
+        )
     ]
+
+    focus_subject = most_remaining
 
     return render_template(
         "subject_insights.html",
         subjects=subjects,
+        total_completed=total_completed,
         most_studied=most_studied,
         most_remaining=most_remaining,
         attention_subjects=attention_subjects,
-        total_completed=total_completed
+        focus_subject=focus_subject
     )
 
 
 # ============================================================
-# STEP 79 - GOAL PERFORMANCE INSIGHTS
+# GOAL INSIGHTS
 # ============================================================
 
 @app.route("/goal-insights")
@@ -1367,62 +1319,66 @@ def goal_insights():
     cursor = conn.cursor()
 
     goals_data = get_goals_data(cursor)
-
     conn.close()
 
     total_goals = len(goals_data)
 
+    total_target = sum(g["target_hours"] for g in goals_data)
+    total_completed = sum(g["completed_hours"] for g in goals_data)
+
     completed_count = sum(
-        1 for goal in goals_data
-        if goal["status"] == "Completed"
+        1 for g in goals_data if g["status"] == "Completed"
     )
 
     active_count = total_goals - completed_count
 
-    average_progress = (
-        sum(goal["percentage"] for goal in goals_data) /
-        total_goals
-        if total_goals else 0
-    )
-
     overdue = [
-        goal for goal in goals_data
-        if goal["deadline_status"] == "Overdue"
-        and goal["status"] != "Completed"
+        g for g in goals_data
+        if g["status"] != "Completed"
+        and g["deadline_status"] == "Overdue"
     ]
 
     nearest = [
-        goal for goal in goals_data
-        if goal["status"] != "Completed"
-        and goal["days_left"] is not None
-        and goal["days_left"] >= 0
+        g for g in goals_data
+        if g["status"] != "Completed"
+        and g["days_left"] is not None
+        and g["days_left"] >= 0
     ]
 
-    nearest_goal = (
-        min(nearest, key=lambda x: x["days_left"])
-        if nearest else None
+    nearest_goal = min(
+        nearest, key=lambda g: g["days_left"], default=None
     )
 
-    if completed_count > 0:
+    overall_percentage = safe_percentage(
+        total_completed, total_target
+    )
+
+    average_progress = (
+        sum(g["percentage"] for g in goals_data) / total_goals
+        if total_goals else 0
+    )
+
+    if completed_count:
         summary = (
-            f"🏆 You have completed {completed_count} of "
-            f"{total_goals} goals."
+            f"You have completed {completed_count} of {total_goals} goals."
         )
-    elif total_goals > 0:
-        summary = (
-            "🎯 Keep working on your goals and update progress regularly."
-        )
+    elif total_goals:
+        summary = "Keep working on your goals and update progress regularly."
     else:
-        summary = (
-            "📚 Create your first goal to start tracking goal performance."
-        )
+        summary = "Create your first goal to track goal performance."
+
+    overdue_count = len(overdue)
 
     return render_template(
         "goal_insights.html",
         goals=goals_data,
         total_goals=total_goals,
+        total_target=total_target,
+        total_completed=total_completed,
+        overall_percentage=overall_percentage,
         completed_count=completed_count,
         active_count=active_count,
+        overdue_count=overdue_count,
         average_progress=average_progress,
         overdue=overdue,
         nearest_goal=nearest_goal,
@@ -1431,7 +1387,7 @@ def goal_insights():
 
 
 # ============================================================
-# STEP 80 - CALENDAR WITH MONTH NAVIGATION
+# STUDY CALENDAR
 # ============================================================
 
 @app.route("/calendar")
@@ -1441,33 +1397,27 @@ def calendar():
     try:
         year = int(request.args.get("year", today.year))
         month = int(request.args.get("month", today.month))
+    except (TypeError, ValueError):
+        year, month = today.year, today.month
 
-        if month < 1:
-            month = 12
-            year -= 1
-        elif month > 12:
-            month = 1
-            year += 1
+    # Normalize month values, including year transitions.
+    while month < 1:
+        month += 12
+        year -= 1
 
-    except ValueError:
-        year = today.year
-        month = today.month
+    while month > 12:
+        month -= 12
+        year += 1
 
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT study_date
-        FROM study_dates
-    """)
-
+    cursor.execute("SELECT study_date FROM study_dates")
     study_dates = set()
 
     for row in cursor.fetchall():
         try:
-            study_dates.add(
-                date.fromisoformat(row[0])
-            )
+            study_dates.add(date.fromisoformat(row[0]))
         except (ValueError, TypeError):
             pass
 
@@ -1475,36 +1425,31 @@ def calendar():
 
     first_day = date(year, month, 1)
     days_in_month = pycalendar.monthrange(year, month)[1]
-    start_weekday = first_day.weekday()
 
-    calendar_days = []
+    calendar_days = [None] * first_day.weekday()
 
-    for _ in range(start_weekday):
-        calendar_days.append(None)
-
-    for day_number in range(1, days_in_month + 1):
-        current = date(year, month, day_number)
+    for number in range(1, days_in_month + 1):
+        current = date(year, month, number)
 
         calendar_days.append({
-            "day": day_number,
+            "day": number,
             "date": current.isoformat(),
             "studied": current in study_dates,
             "today": current == today
         })
 
-    if month == 1:
-        previous_year = year - 1
-        previous_month = 12
-    else:
-        previous_year = year
-        previous_month = month - 1
+    previous_year, previous_month = (
+        (year - 1, 12) if month == 1 else (year, month - 1)
+    )
 
-    if month == 12:
-        next_year = year + 1
-        next_month = 1
-    else:
-        next_year = year
-        next_month = month + 1
+    next_year, next_month = (
+        (year + 1, 1) if month == 12 else (year, month + 1)
+    )
+
+    studied_days = sum(
+        1 for item in calendar_days
+        if item and item["studied"]
+    )
 
     return render_template(
         "calendar.html",
@@ -1516,15 +1461,12 @@ def calendar():
         previous_month=previous_month,
         next_year=next_year,
         next_month=next_month,
-        studied_days=sum(
-            1 for day in calendar_days
-            if day and day["studied"]
-        )
+        studied_days=studied_days
     )
 
 
 # ============================================================
-# STEP 81 - DEADLINE REMINDERS
+# DEADLINE REMINDERS
 # ============================================================
 
 @app.route("/reminders")
@@ -1533,50 +1475,40 @@ def reminders():
     cursor = conn.cursor()
 
     goals_data = get_goals_data(cursor)
-
     conn.close()
 
-    reminders_data = []
-
-    for goal in goals_data:
-        if goal["status"] == "Completed":
-            continue
-
-        status = goal["deadline_status"]
-
-        if status in (
-            "Overdue",
-            "Due Today",
-            "Due Soon"
-        ):
-            reminders_data.append(goal)
+    reminders_data = [
+        goal for goal in goals_data
+        if goal["status"] != "Completed"
+        and goal["deadline_status"] in (
+            "Overdue", "Due Today", "Due Soon"
+        )
+    ]
 
     reminders_data.sort(
-        key=lambda item: (
-            item["days_left"]
-            if item["days_left"] is not None
-            else 999999
+        key=lambda g: (
+            g["days_left"]
+            if g["days_left"] is not None else 999999
         )
     )
 
-    if not reminders_data:
+    if reminders_data:
         message = (
-            "✅ No urgent deadline reminders right now. "
-            "Keep following your study schedule!"
+            f"You have {len(reminders_data)} deadline reminder(s) to check."
         )
     else:
         message = (
-            f"🔔 You have {len(reminders_data)} "
-            f"deadline reminder(s) to check."
+            "No urgent deadline reminders right now. "
+            "Keep following your study schedule!"
         )
 
     return render_template(
         "reminders.html",
         reminders=reminders_data,
+        reminders_data=reminders_data,
         goals=goals_data,
         message=message
     )
-
 
 # ============================================================
 # RUN APPLICATION
