@@ -1,0 +1,176 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deadline Reminders | Smart Study Buddy</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .reminder-card {
+            background: white;
+            border-radius: 16px;
+            padding: 22px;
+            margin-bottom: 16px;
+            border-left: 5px solid #f59e0b;
+            box-shadow: 0 5px 20px rgba(20, 24, 40, .07);
+        }
+
+        .reminder-card.overdue {
+            border-left-color: #dc2626;
+        }
+
+        .reminder-card.today {
+            border-left-color: #ea580c;
+        }
+
+        .reminder-card.soon {
+            border-left-color: #eab308;
+        }
+
+        .reminder-card h3 {
+            margin-bottom: 12px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            background: white;
+            border-radius: 16px;
+        }
+
+        .empty-state .emoji {
+            font-size: 44px;
+        }
+    </style>
+</head>
+
+<body>
+    <nav>
+        <a href="/">📚 Smart Study Buddy</a>
+        <a href="/">🏠 Dashboard</a>
+        <a href="/plans">📚 Study Plans</a>
+        <a href="/progress">📊 Progress</a>
+        <a href="/goals">🎯 Goals</a>
+        <a href="/analytics">📈 Analytics</a>
+        <a href="/insights">💡 Insights</a>
+        <a href="/calendar">🗓️ Calendar</a>
+        <a href="/reminders">🔔 Reminders</a>
+    </nav>
+
+    <main class="container">
+        <div class="page-header">
+            <div>
+                <h1>🔔 Deadline Reminders</h1>
+                <p class="subtitle">
+                    Keep track of your study goals and upcoming deadlines.
+                </p>
+            </div>
+
+            <a class="button" href="/goals">Manage Goals</a>
+        </div>
+
+        <div class="alert">
+            {{ message }}
+        </div>
+
+        {% if reminders %}
+            <h2>Goals That Need Attention</h2>
+
+            {% for goal in reminders %}
+                <div class="reminder-card
+                    {% if goal.deadline_status == 'Overdue' %}overdue
+                    {% elif goal.deadline_status == 'Due Today' %}today
+                    {% else %}soon{% endif %}">
+
+                    <h3>{{ goal.goal }}</h3>
+
+                    <p>
+                        <strong>Deadline:</strong>
+                        {{ goal.deadline or 'Not set' }}
+                    </p>
+
+                    <p>
+                        <strong>Status:</strong>
+                        {{ goal.deadline_status }}
+                    </p>
+
+                    <p>
+                        <strong>Target hours:</strong>
+                        {{ "%.1f"|format(goal.target_hours) }}
+                    </p>
+
+                    <p>
+                        <strong>Completed hours:</strong>
+                        {{ "%.1f"|format(goal.completed_hours) }}
+                    </p>
+
+                    <p>
+                        <strong>Remaining hours:</strong>
+                        {{ "%.1f"|format(goal.remaining_hours) }}
+                    </p>
+
+                    {% if goal.deadline_status == 'Overdue' %}
+                        <span class="badge red">Overdue</span>
+                    {% elif goal.deadline_status == 'Due Today' %}
+                        <span class="badge red">Due Today</span>
+                    {% else %}
+                        <span class="badge yellow">Due Soon</span>
+                    {% endif %}
+
+                    {% if goal.recommendation %}
+                        <p>{{ goal.recommendation }}</p>
+                    {% endif %}
+
+                    <div class="actions">
+                        <a class="button" href="/goals">
+                            Update Goal Progress
+                        </a>
+                    </div>
+                </div>
+            {% endfor %}
+
+        {% else %}
+            <div class="empty-state">
+                <div class="emoji">🎉</div>
+                <h2>You're All Caught Up!</h2>
+                <p>
+                    There are no urgent deadline reminders right now.
+                    Keep working toward your study goals.
+                </p>
+                <a class="button" href="/goals">View My Goals</a>
+            </div>
+        {% endif %}
+
+        <div class="card">
+            <h3>📋 All Study Goals</h3>
+
+            {% if goals %}
+                {% for goal in goals %}
+                    <div style="padding: 12px 0; border-bottom: 1px solid #eceef3;">
+                        <strong>{{ goal.goal }}</strong>
+                        <p class="muted">
+                            {{ "%.1f"|format(goal.completed_hours) }}
+                            / {{ "%.1f"|format(goal.target_hours) }} hours
+                            · {{ goal.status }}
+                        </p>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>No study goals created yet.</p>
+                <a class="button" href="/goals">Create a Goal</a>
+            {% endif %}
+        </div>
+    </main>
+</body>
+</html>
