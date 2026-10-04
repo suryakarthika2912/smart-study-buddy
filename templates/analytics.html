@@ -1,640 +1,887 @@
+
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Analytics | Smart Study Buddy</title>
 
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
 
-    <title>Study Analytics</title>
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f5f6fb;
+            color: #25263a;
+        }
 
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='style.css') }}">
+        .page {
+            max-width: 1200px;
+            margin: auto;
+            padding: 28px 20px 50px;
+        }
 
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 28px;
+        }
+
+        .header h1 {
+            margin: 0 0 8px;
+            font-size: 30px;
+        }
+
+        .header p {
+            margin: 0;
+            color: #74758a;
+            line-height: 1.6;
+        }
+
+        .back-link {
+            display: inline-block;
+            padding: 11px 16px;
+            border-radius: 9px;
+            background: #6c63ff;
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .back-link:hover {
+            background: #554be5;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 18px;
+            margin-bottom: 32px;
+        }
+
+        .summary-card {
+            background: white;
+            padding: 22px;
+            border-radius: 16px;
+            border: 1px solid #e9e9f2;
+            box-shadow: 0 4px 16px rgba(40, 40, 80, 0.04);
+        }
+
+        .summary-icon {
+            font-size: 27px;
+            margin-bottom: 15px;
+        }
+
+        .summary-card p {
+            margin: 0 0 10px;
+            color: #77788c;
+            font-size: 14px;
+        }
+
+        .summary-card h2 {
+            margin: 0 0 8px;
+            font-size: 29px;
+            overflow-wrap: anywhere;
+        }
+
+        .summary-card small {
+            color: #89899b;
+        }
+
+        .section {
+            margin-top: 32px;
+        }
+
+        .section-heading {
+            margin-bottom: 18px;
+        }
+
+        .section-heading h2 {
+            margin: 0 0 7px;
+            font-size: 22px;
+        }
+
+        .section-heading p {
+            margin: 0;
+            color: #77788c;
+            line-height: 1.6;
+        }
+
+        .panel {
+            background: white;
+            border: 1px solid #e9e9f2;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 16px rgba(40, 40, 80, 0.035);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+        }
+
+        .status-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: white;
+            border: 1px solid #e9e9f2;
+            border-radius: 14px;
+            padding: 18px;
+        }
+
+        .status-icon {
+            font-size: 25px;
+        }
+
+        .status-card h3 {
+            margin: 0 0 5px;
+            font-size: 24px;
+        }
+
+        .status-card p {
+            margin: 0;
+            font-size: 13px;
+            color: #77788c;
+        }
+
+        .chart-row {
+            padding: 20px 0;
+            border-bottom: 1px solid #eeeeF5;
+        }
+
+        .chart-row:first-child {
+            padding-top: 0;
+        }
+
+        .chart-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .chart-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .chart-title h3 {
+            margin: 0;
+            font-size: 17px;
+            overflow-wrap: anywhere;
+        }
+
+        .subject-status {
+            padding: 6px 10px;
+            border-radius: 20px;
+            background: #f0efff;
+            color: #5d54dc;
+            font-size: 12px;
+        }
+
+        .chart-label {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin: 12px 0 7px;
+            font-size: 14px;
+        }
+
+        .chart-label span {
+            color: #77788c;
+        }
+
+        .chart-track {
+            width: 100%;
+            height: 13px;
+            background: #eeeeF5;
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .chart-bar {
+            height: 100%;
+            border-radius: 20px;
+            transition: width 0.4s ease;
+        }
+
+        .planned-bar {
+            background: #7569f8;
+        }
+
+        .completed-bar {
+            background: #22a06b;
+        }
+
+        .chart-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 18px;
+            margin-top: 24px;
+            color: #68697c;
+            font-size: 13px;
+        }
+
+        .legend-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .planned-dot {
+            background: #7569f8;
+        }
+
+        .completed-dot {
+            background: #22a06b;
+        }
+
+        .subject-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        .subject-card {
+            background: white;
+            border: 1px solid #e9e9f2;
+            border-radius: 16px;
+            padding: 22px;
+            box-shadow: 0 4px 16px rgba(40, 40, 80, 0.035);
+        }
+
+        .subject-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .subject-header h3 {
+            margin: 0;
+            font-size: 18px;
+            overflow-wrap: anywhere;
+        }
+
+        .subject-stats {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 22px;
+        }
+
+        .subject-stats div {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        .subject-stats span {
+            color: #77788c;
+            font-size: 12px;
+        }
+
+        .subject-stats strong {
+            font-size: 14px;
+            overflow-wrap: anywhere;
+        }
+
+        .progress-heading {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 13px;
+        }
+
+        .progress-heading span {
+            color: #77788c;
+        }
+
+        .progress-track {
+            height: 10px;
+            margin-top: 9px;
+            background: #eeeeF5;
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #7569f8;
+            border-radius: 20px;
+        }
+
+        .insights-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        .insight-card {
+            background: white;
+            border: 1px solid #e9e9f2;
+            border-radius: 16px;
+            padding: 22px;
+        }
+
+        .insight-icon {
+            font-size: 27px;
+            margin-bottom: 13px;
+        }
+
+        .insight-card h3 {
+            margin: 0 0 12px;
+            font-size: 16px;
+        }
+
+        .insight-value {
+            margin: 0 0 7px;
+            font-size: 19px;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+        }
+
+        .insight-card p:last-child {
+            color: #77788c;
+            font-size: 14px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 32px 18px;
+            color: #77788c;
+            line-height: 1.6;
+        }
+
+        .empty-state strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #25263a;
+        }
+
+        @media (max-width: 900px) {
+            .summary-grid,
+            .status-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .subject-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .insights-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 560px) {
+            .page {
+                padding: 20px 12px 35px;
+            }
+
+            .header h1 {
+                font-size: 25px;
+            }
+
+            .summary-grid,
+            .status-grid,
+            .subject-grid,
+            .insights-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .panel,
+            .summary-card,
+            .subject-card,
+            .insight-card {
+                padding: 17px;
+            }
+
+            .subject-stats {
+                gap: 8px;
+            }
+
+            .subject-stats strong {
+                font-size: 12px;
+            }
+        }
+    </style>
 </head>
 
 <body>
+<div class="page">
 
-<div class="container">
+    <header class="header">
+        <div>
+            <h1>📊 Study Analytics</h1>
+            <p>Understand your study habits and track your progress.</p>
+        </div>
 
-    <!-- Navigation -->
+        <a class="back-link" href="/">
+    ← Home
+        </a>
+    </header>
 
-    <nav>
-
-        <a href="/">Dashboard</a>
-
-        <a href="/plans">Study Plans</a>
-
-        <a href="/progress">Progress</a>
-
-        <a href="/goals">Goals</a>
-
-        <a href="/calendar">Calendar</a>
-
-        <a href="/analytics">Analytics</a>
-
-    </nav>
-
-
-    <!-- Header -->
-
-    <div class="page-header">
-
-        <h1>📊 Study Analytics</h1>
-
-        <p>
-            Compare your planned study time with your
-            actual completed study time.
-        </p>
-
-    </div>
-
-
-    <!-- Overall Summary -->
-
-    <div class="summary-grid">
+    <!-- Summary Cards -->
+    <section class="summary-grid">
 
         <div class="summary-card">
-
-            <h3>📚 Planned Hours</h3>
-
-            <p>
-                {{ "%.1f"|format(total_planned) }}
-            </p>
-
+            <div class="summary-icon">📚</div>
+            <p>Total Planned Hours</p>
+            <h2>{{ "%.1f"|format(total_planned|default(0, true)) }}</h2>
+            <small>Hours planned</small>
         </div>
-
 
         <div class="summary-card">
-
-            <h3>✅ Completed Hours</h3>
-
-            <p>
-                {{ "%.1f"|format(total_completed) }}
-            </p>
-
+            <div class="summary-icon">✅</div>
+            <p>Total Completed Hours</p>
+            <h2>{{ "%.1f"|format(total_completed|default(0, true)) }}</h2>
+            <small>Hours completed</small>
         </div>
-
 
         <div class="summary-card">
-
-            <h3>⏳ Remaining Hours</h3>
-
-            <p>
-                {{ "%.1f"|format(total_remaining) }}
-            </p>
-
+            <div class="summary-icon">⏳</div>
+            <p>Remaining Hours</p>
+            <h2>{{ "%.1f"|format(total_remaining|default(0, true)) }}</h2>
+            <small>Hours remaining</small>
         </div>
-
 
         <div class="summary-card">
+            <div class="summary-icon">🎯</div>
 
-            <h3>📈 Overall Progress</h3>
+<p>Overall Progress</p>
+<h2>{{ overall_progress|default(0, true) }}%</h2>
 
-            <p>
-                {{ "%.1f"|format(overall_percentage) }}%
-            </p>
-
-        </div>
-
+<div class="progress-track">
+    <div class="progress-fill"
+         style="width: {{ [[overall_progress|default(0, true)|float, 0]|max, 100]|min }}%;">
     </div>
-
-
-    <!-- Step 75 Status Summary -->
-
-    <div class="analytics-section">
-
-        <h2>📌 Study Status</h2>
-
-        <div class="summary-grid">
-
-            <div class="summary-card">
-
-                <h3>🟢 On Track</h3>
-
-                <p>
-                    {{ on_track_count }}
-                </p>
-
-            </div>
-
-
-            <div class="summary-card">
-
-                <h3>🟡 Needs Attention</h3>
-
-                <p>
-                    {{ needs_attention_count }}
-                </p>
-
-            </div>
-
-
-            <div class="summary-card">
-
-                <h3>🔴 Behind</h3>
-
-                <p>
-                    {{ behind_count }}
-                </p>
-
-            </div>
-
-
-            <div class="summary-card">
-
-                <h3>⚪ Not Started</h3>
-
-                <p>
-                    {{ not_started_count }}
-                </p>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <!-- Overall Progress Bar -->
-
-    <div class="analytics-section">
-
-        <h2>Overall Progress</h2>
-
-        <div class="progress-container">
-
-            <div class="progress-bar">
-
-                <div class="progress-fill"
-                     style="width: {{ overall_percentage }}%;">
-                </div>
-
-            </div>
-
-            <p>
-                {{ "%.1f"|format(overall_percentage) }}%
-                completed
-            </p>
-
-        </div>
-
-    </div>
-
-
-    <!-- Subject Analytics -->
-
-    <div class="analytics-section">
-
-        <h2>📚 Subject-wise Progress</h2>
-
-        {% if subjects %}
-
-            {% for subject in subjects %}
-
-                <div class="subject-card">
-
-                    <div class="subject-header">
-
-                        <h3>
-                            {{ subject.subject }}
-                        </h3>
-
-                        <span class="status {{ subject.status_class }}">
-
-                            {% if subject.status == "On Track" %}
-                                🟢
-                            {% elif subject.status == "Needs Attention" %}
-                                🟡
-                            {% elif subject.status == "Behind" %}
-                                🔴
-                            {% else %}
-                                ⚪
-                            {% endif %}
-
-                            {{ subject.status }}
-
-                        </span>
-
-                    </div>
-
-
-                    <!-- Progress Bar -->
-
-                    <div class="progress-container">
-
-                        <div class="progress-bar">
-
-                            <div class="progress-fill"
-                                 style="width: {{ subject.percentage }}%;">
-                            </div>
-
-                        </div>
-
-                    </div>
-
-
-                    <!-- Statistics -->
-
-                    <div class="subject-stats">
-
-                        <div>
-
-                            <strong>
-                                Planned
-                            </strong>
-
-                            <span>
-                                {{ "%.1f"|format(subject.planned) }} hrs
-                            </span>
-
-                        </div>
-
-
-                        <div>
-
-                            <strong>
-                                Completed
-                            </strong>
-
-                            <span>
-                                {{ "%.1f"|format(subject.completed) }} hrs
-                            </span>
-
-                        </div>
-
-
-                        <div>
-
-                            <strong>
-                                Remaining
-                            </strong>
-
-                            <span>
-                                {{ "%.1f"|format(subject.remaining) }} hrs
-                            </span>
-
-                        </div>
-
-
-                        <div>
-
-                            <strong>
-                                Progress
-                            </strong>
-
-                            <span>
-                                {{ "%.1f"|format(subject.percentage) }}%
-                            </span>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-            {% endfor %}
-
-        {% else %}
-
-            <div class="empty-state">
-
-                <h3>No Study Data Yet</h3>
-
-                <p>
-                    Create a study plan to start
-                    seeing analytics.
-                </p>
-
-                <a href="/plans">
-                    Create Study Plan
-                </a>
-
-            </div>
-
-        {% endif %}
-
-    </div>
-
-
-    <!-- Insights -->
-
-    {% if subjects %}
-
-    <div class="analytics-section">
-
-        <h2>💡 Study Insights</h2>
-
-
-        <div class="insight-grid">
-
-
-            {% if most_planned %}
-
-            <div class="insight-card">
-
-                <h3>📚 Most Planned</h3>
-
-                <p>
-                    <strong>
-                        {{ most_planned.subject }}
-                    </strong>
-                </p>
-
-                <p>
-                    {{ "%.1f"|format(most_planned.planned) }}
-                    hours planned
-                </p>
-
-            </div>
-
-            {% endif %}
-
-
-            {% if most_completed %}
-
-            <div class="insight-card">
-
-                <h3>✅ Most Completed</h3>
-
-                <p>
-                    <strong>
-                        {{ most_completed.subject }}
-                    </strong>
-                </p>
-
-                <p>
-                    {{ "%.1f"|format(most_completed.completed) }}
-                    hours completed
-                </p>
-
-            </div>
-
-            {% endif %}
-
-
-            {% if most_remaining %}
-
-            <div class="insight-card">
-
-                <h3>⏳ Most Remaining</h3>
-
-                <p>
-                    <strong>
-                        {{ most_remaining.subject }}
-                    </strong>
-                </p>
-
-                <p>
-                    {{ "%.1f"|format(most_remaining.remaining) }}
-                    hours remaining
-                </p>
-
-            </div>
-
-            {% endif %}
-
-        </div>
-
-    </div>
-
-    {% endif %}
-
+</div>
+
+{% if hours_over_plan|default(0, true) > 0 %}
+    <p>
+        Recorded hours exceed the current plan by
+        {{ "%.1f"|format(hours_over_plan) }} hours.
+    </p>
+{% endif %}
 
 </div>
 
+</section>
+
+    <!-- Study Status -->
+    <section class="section">
+        <div class="section-heading">
+            <h2>📌 Study Status Overview</h2>
+            <p>See how your subjects are progressing.</p>
+        </div>
+
+        <div class="status-grid">
+            <div class="status-card">
+                <span class="status-icon">🟢</span>
+                <div>
+                    <h3>{{ on_track_count|default(0, true) }}</h3>
+                    <p>On Track</p>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <span class="status-icon">🟡</span>
+                <div>
+                    <h3>{{ needs_attention_count|default(0, true) }}</h3>
+                    <p>Needs Attention</p>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <span class="status-icon">🔴</span>
+                <div>
+                    <h3>{{ behind_count|default(0, true) }}</h3>
+                    <p>Behind</p>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <span class="status-icon">⚪</span>
+                <div>
+                    <h3>{{ not_started_count|default(0, true) }}</h3>
+                    <p>Not Started</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+<!-- Interactive Analytics Charts -->
+<section class="charts-section">
+    <h2>📊 Interactive Study Charts</h2>
+    <p>Explore your planned hours, completed hours,
+       and study status.</p>
+
+    <div class="charts-grid">
+        <div class="chart-card">
+            <h3>Planned vs Completed Hours</h3>
+            <canvas id="hoursChart"></canvas>
+        </div>
+
+        <div class="chart-card">
+            <h3>Study Status Distribution</h3>
+            <canvas id="statusChart"></canvas>
+        </div>
+
+        <div class="chart-card chart-wide">
+            <h3>Completed vs Remaining Hours</h3>
+            <canvas id="progressChart"></canvas>
+        </div>
+    </div>
+</section>
 
 <style>
+.charts-section {
+    margin: 32px 0;
+}
 
-    .analytics-section {
-        margin-top: 30px;
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.chart-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 18px;
+    padding: 22px;
+    min-width: 0;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+}
+
+.chart-card h3 {
+    margin-top: 0;
+    color: #1f2937;
+}
+
+.chart-card canvas {
+    width: 100% !important;
+    max-height: 320px;
+}
+
+.chart-wide {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 760px) {
+    .charts-grid {
+        grid-template-columns: 1fr;
     }
 
-
-    .summary-grid {
-        display: grid;
-        grid-template-columns:
-            repeat(auto-fit, minmax(180px, 1fr));
-
-        gap: 20px;
-
-        margin-top: 20px;
+    .chart-wide {
+        grid-column: auto;
     }
-
-
-    .summary-card {
-        padding: 20px;
-
-        border-radius: 14px;
-
-        background: #ffffff;
-
-        box-shadow:
-            0 4px 15px rgba(0, 0, 0, 0.08);
-
-        text-align: center;
-    }
-
-
-    .summary-card h3 {
-        margin-bottom: 10px;
-    }
-
-
-    .summary-card p {
-        font-size: 28px;
-
-        font-weight: bold;
-
-        margin: 0;
-    }
-
-
-    .subject-card {
-        margin-top: 20px;
-
-        padding: 22px;
-
-        border-radius: 15px;
-
-        background: #ffffff;
-
-        box-shadow:
-            0 4px 15px rgba(0, 0, 0, 0.08);
-    }
-
-
-    .subject-header {
-        display: flex;
-
-        justify-content: space-between;
-
-        align-items: center;
-
-        gap: 15px;
-    }
-
-
-    .subject-header h3 {
-        margin: 0;
-    }
-
-
-    .status {
-        padding: 7px 12px;
-
-        border-radius: 20px;
-
-        font-size: 14px;
-
-        font-weight: bold;
-    }
-
-
-    .on-track {
-        background: #dff6e4;
-    }
-
-
-    .needs-attention {
-        background: #fff2cc;
-    }
-
-
-    .behind {
-        background: #ffdede;
-    }
-
-
-    .not-started {
-        background: #eeeeee;
-    }
-
-
-    .progress-container {
-        margin-top: 15px;
-    }
-
-
-    .progress-bar {
-        width: 100%;
-
-        height: 12px;
-
-        background: #eeeeee;
-
-        border-radius: 10px;
-
-        overflow: hidden;
-    }
-
-
-    .progress-fill {
-        height: 100%;
-
-        border-radius: 10px;
-
-        background: #6c63ff;
-    }
-
-
-    .subject-stats {
-        display: grid;
-
-        grid-template-columns:
-            repeat(auto-fit, minmax(130px, 1fr));
-
-        gap: 15px;
-
-        margin-top: 20px;
-    }
-
-
-    .subject-stats div {
-        padding: 12px;
-
-        background: #f7f7f7;
-
-        border-radius: 10px;
-    }
-
-
-    .subject-stats strong {
-        display: block;
-
-        margin-bottom: 5px;
-    }
-
-
-    .subject-stats span {
-        font-size: 14px;
-    }
-
-
-    .insight-grid {
-        display: grid;
-
-        grid-template-columns:
-            repeat(auto-fit, minmax(200px, 1fr));
-
-        gap: 20px;
-
-        margin-top: 20px;
-    }
-
-
-    .insight-card {
-        padding: 20px;
-
-        border-radius: 14px;
-
-        background: #ffffff;
-
-        box-shadow:
-            0 4px 15px rgba(0, 0, 0, 0.08);
-    }
-
-
-    .empty-state {
-        text-align: center;
-
-        padding: 40px;
-
-        background: #ffffff;
-
-        border-radius: 15px;
-
-        margin-top: 20px;
-    }
-
-
-    .empty-state a {
-        display: inline-block;
-
-        margin-top: 15px;
-
-        padding: 10px 18px;
-
-        border-radius: 8px;
-
-        text-decoration: none;
-    }
-
-
-    @media (max-width: 600px) {
-
-        .subject-header {
-            flex-direction: column;
-
-            align-items: flex-start;
-        }
-
-    }
-
+}
 </style>
 
-</body>
+<!-- Chart.js library -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+<script>
+const subjectLabels = {{ subjects | map(attribute='name') | list | tojson }};
+const plannedHours = {{ subjects | map(attribute='planned') | list | tojson }};
+const completedHours = {{ subjects | map(attribute='completed') | list | tojson }};
+const remainingHours = {{ subjects | map(attribute='remaining') | list | tojson }};
+
+const statusLabels = [
+    "On Track",
+    "Needs Attention",
+    "Behind",
+    "Not Started"
+];
+
+const statusValues = [
+    {{ on_track_count }},
+    {{ needs_attention_count }},
+    {{ behind_count }},
+    {{ not_started_count }}
+];
+
+if (typeof Chart !== "undefined") {
+    new Chart(document.getElementById("hoursChart"), {
+        type: "bar",
+        data: {
+            labels: subjectLabels,
+            datasets: [
+                {
+                    label: "Planned Hours",
+                    data: plannedHours,
+                    backgroundColor: "#7765f8",
+                    borderRadius: 6
+                },
+                {
+                    label: "Completed Hours",
+                    data: completedHours,
+                    backgroundColor: "#22c55e",
+                    borderRadius: 6
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: "Hours" }
+                }
+            },
+            plugins: {
+                tooltip: { enabled: true }
+            }
+        }
+    });
+
+    new Chart(document.getElementById("statusChart"), {
+        type: "doughnut",
+        data: {
+            labels: statusLabels,
+            datasets: [{
+                data: statusValues,
+                backgroundColor: [
+                    "#22c55e",
+                    "#facc15",
+                    "#ef4444",
+                    "#c4b5fd"
+                ],
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: "bottom" },
+                tooltip: { enabled: true }
+            }
+        }
+    });
+
+    new Chart(document.getElementById("progressChart"), {
+        type: "bar",
+        data: {
+            labels: subjectLabels,
+            datasets: [
+                {
+                    label: "Completed Hours",
+                    data: completedHours,
+                    backgroundColor: "#22c55e",
+                    borderRadius: 6
+                },
+                {
+                    label: "Remaining Hours",
+                    data: remainingHours,
+                    backgroundColor: "#f59e0b",
+                    borderRadius: 6
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { stacked: true },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    title: { display: true, text: "Hours" }
+                }
+            }
+        }
+    });
+}
+</script>
+
+    <!-- Study Hours Comparison -->
+    <section class="section">
+        <div class="section-heading">
+            <h2>📊 Study Hours Comparison</h2>
+            <p>Compare planned and completed hours for each subject.</p>
+        </div>
+
+        <div class="panel">
+
+            {% if subjects %}
+                {% set max_planned = [subjects|map(attribute='planned')|max, 1]|max %}
+                {% set max_completed = [subjects|map(attribute='completed')|max, 1]|max %}
+
+                {% for subject in subjects %}
+                    <div class="chart-row">
+
+                        <div class="chart-title">
+                            <h3>{{ subject.name }}</h3>
+                            <span class="subject-status">
+                                {{ subject.status }}
+                            </span>
+                        </div>
+
+                        <div class="chart-label">
+                            <span>Planned hours</span>
+                            <strong>{{ "%.1f"|format(subject.planned|default(0, true)) }} hrs</strong>
+                        </div>
+
+                        <div class="chart-track">
+                            <div class="chart-bar planned-bar"
+                                 style="width: {{ [[(subject.planned|default(0, true)|float / max_planned|float * 100), 0]|max, 100]|min }}%;">
+                            </div>
+                        </div>
+
+                        <div class="chart-label">
+                            <span>Completed hours</span>
+                            <strong>{{ "%.1f"|format(subject.completed|default(0, true)) }} hrs</strong>
+                        </div>
+
+                        <div class="chart-track">
+                            <div class="chart-bar completed-bar"
+                                 style="width: {{ [[(subject.completed|default(0, true)|float / max_completed|float * 100), 0]|max, 100]|min }}%;">
+                            </div>
+                        </div>
+
+                    </div>
+                {% endfor %}
+
+                <div class="chart-legend">
+                    <span><i class="legend-dot planned-dot"></i> Planned hours</span>
+                    <span><i class="legend-dot completed-dot"></i> Completed hours</span>
+                </div>
+
+            {% else %}
+                <div class="empty-state">
+                    <strong>No subject data available yet.</strong>
+                    Create a study plan to view your study-hours chart.
+                </div>
+            {% endif %}
+
+        </div>
+    </section>
+
+    <!-- Subject-wise Progress -->
+    <section class="section">
+        <div class="section-heading">
+            <h2>📚 Subject-wise Progress</h2>
+            <p>Review completed hours, remaining hours, and progress.</p>
+        </div>
+
+        {% if subjects %}
+            <div class="subject-grid">
+
+                {% for subject in subjects %}
+                    <div class="subject-card">
+
+                        <div class="subject-header">
+                            <h3>{{ subject.name }}</h3>
+                            <span class="subject-status">
+                                {{ subject.status_icon|default('📘', true) }}
+                                {{ subject.status|default('Not Started', true) }}
+                            </span>
+                        </div>
+
+                        <div class="subject-stats">
+                            <div>
+                                <span>Planned</span>
+                                <strong>{{ "%.1f"|format(subject.planned|default(0, true)) }} hrs</strong>
+                            </div>
+
+                            <div>
+                                <span>Completed</span>
+                                <strong>{{ "%.1f"|format(subject.completed|default(0, true)) }} hrs</strong>
+                            </div>
+
+                            <div>
+                                <span>Remaining</span>
+                                <strong>{{ "%.1f"|format(subject.remaining|default(0, true)) }} hrs</strong>
+                            </div>
+                        </div>
+
+                        <div class="progress-heading">
+                            <span>Progress</span>
+                            <strong>{{ subject.progress|default(0, true) }}%</strong>
+                        </div>
+
+                        <div class="progress-track">
+                            <div class="progress-fill"
+                                 style="width: {{ [[subject.progress|default(0, true)|float, 0]|max, 100]|min }}%;">
+                            </div>
+                        </div>
+
+                    </div>
+                {% endfor %}
+
+            </div>
+        {% else %}
+            <div class="panel empty-state">
+                <strong>No subjects found.</strong>
+                Your subject progress will appear here when study-plan data is available.
+            </div>
+        {% endif %}
+    </section>
+
+    <!-- Study Insights -->
+    <section class="section">
+        <div class="section-heading">
+            <h2>💡 Study Insights</h2>
+            <p>A quick look at your study-planning activity.</p>
+        </div>
+
+        <div class="insights-grid">
+
+            <div class="insight-card">
+                <div class="insight-icon">📅</div>
+                <h3>Most Planned Subject</h3>
+
+                {% if most_planned %}
+                    <p class="insight-value">{{ most_planned.name }}</p>
+                    <p>{{ "%.1f"|format(most_planned.planned|default(0, true)) }} planned hours</p>
+                {% else %}
+                    <p>No planned subject available.</p>
+                {% endif %}
+            </div>
+
+            <div class="insight-card">
+                <div class="insight-icon">🏆</div>
+                <h3>Most Completed Subject</h3>
+
+                {% if most_completed %}
+                    <p class="insight-value">{{ most_completed.name }}</p>
+                    <p>{{ "%.1f"|format(most_completed.completed|default(0, true)) }} completed hours</p>
+                {% else %}
+                    <p>No completed subject available.</p>
+                {% endif %}
+            </div>
+
+            <div class="insight-card">
+                <div class="insight-icon">⏰</div>
+                <h3>Most Remaining Subject</h3>
+
+                {% if most_remaining %}
+                    <p class="insight-value">{{ most_remaining.name }}</p>
+                    <p>{{ "%.1f"|format(most_remaining.remaining|default(0, true)) }} remaining hours</p>
+                {% else %}
+                    <p>No remaining subject available.</p>
+                {% endif %}
+            </div>
+
+        </div>
+    </section>
+
+</div>
+</body>
 </html>
