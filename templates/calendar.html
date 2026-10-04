@@ -1,7 +1,10 @@
+
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Study Calendar - Smart Study Buddy</title>
 
@@ -9,12 +12,11 @@
           href="{{ url_for('static', filename='style.css') }}">
 
     <style>
-
         .calendar-card {
             background: white;
             padding: 25px;
             border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
             margin-top: 25px;
         }
 
@@ -23,10 +25,38 @@
             margin-bottom: 25px;
         }
 
+        .month-navigation {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .month-navigation h1 {
+            margin: 0;
+            font-size: 30px;
+        }
+
+        .month-button {
+            display: inline-block;
+            padding: 10px 16px;
+            background: #eef2ff;
+            color: #3730a3;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        .month-button:hover {
+            background: #dbeafe;
+        }
+
         .calendar {
             display: grid;
-            grid-template-columns:
-                repeat(7, 1fr);
+            grid-template-columns: repeat(7, minmax(0, 1fr));
             gap: 8px;
         }
 
@@ -45,6 +75,20 @@
             background: #f5f7fa;
             text-align: center;
             position: relative;
+            box-sizing: border-box;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+
+        .day:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+        }
+
+        .day:focus-visible {
+            outline: 3px solid #6366f1;
+            outline-offset: 2px;
         }
 
         .empty-day {
@@ -58,7 +102,7 @@
 
         .studied {
             background: #dcfce7;
-            border: 2px solid #22c55e;
+            border-color: #22c55e;
         }
 
         .today {
@@ -101,7 +145,20 @@
             border: 3px solid #4f46e5;
         }
 
+        .calendar-summary {
+            margin: 12px 0 20px;
+            color: #374151;
+        }
+
+        .back-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+
         @media (max-width: 600px) {
+            .calendar-card {
+                padding: 12px;
+            }
 
             .calendar {
                 gap: 4px;
@@ -109,7 +166,11 @@
 
             .day {
                 min-height: 50px;
-                padding: 5px;
+                padding: 5px 2px;
+            }
+
+            .empty-day {
+                min-height: 50px;
             }
 
             .day-number {
@@ -122,98 +183,81 @@
 
             .day-name {
                 font-size: 12px;
+                padding: 9px 2px;
+            }
+
+            .month-navigation {
+                justify-content: center;
+            }
+
+            .month-navigation h1 {
+                font-size: 22px;
+                width: 100%;
+                order: -1;
+            }
+
+            .month-button {
+                padding: 8px 10px;
+                font-size: 13px;
             }
         }
-
     </style>
-
 </head>
-
 
 <body>
 
     <!-- Navigation -->
-
     <nav>
-
-        <a href="/">
-            🏠 Dashboard
-        </a>
-
-        <a href="/plans">
-            📚 Study Plans
-        </a>
-
-        <a href="/progress">
-            📊 Progress
-        </a>
-
-        <a href="/goals">
-            🎯 Goals
-        </a>
-
-        <a href="/calendar">
-            📅 Calendar
-        </a>
-
+        <a href="{{ url_for('index') }}">🏠 Dashboard</a>
+        <a href="{{ url_for('plans') }}">📚 Study Plans</a>
+        <a href="{{ url_for('progress') }}">📊 Progress</a>
+        <a href="{{ url_for('goals') }}">🎯 Goals</a>
+        <a href="{{ url_for('calendar') }}">📅 Calendar</a>
     </nav>
 
-
     <!-- Main Container -->
+    <main class="container">
 
-    <div class="container">
+        <section class="calendar-card">
 
-        <div class="calendar-card">
-
+            <!-- Calendar Heading and Month Navigation -->
             <div class="calendar-title">
 
-                <h1>
-                    📅 {{ month_name }} {{ year }}
-                </h1>
+                <div class="month-navigation">
 
-                <p>
-                    Your study activity calendar
+                    <a class="month-button"
+                       href="{{ url_for('calendar', year=previous_year, month=previous_month) }}">
+                        ← Previous
+                    </a>
+
+                    <h1>📅 {{ month_name }} {{ year }}</h1>
+
+                    <a class="month-button"
+                       href="{{ url_for('calendar', year=next_year, month=next_month) }}">
+                        Next →
+                    </a>
+
+                </div>
+
+                <p>Your study activity calendar</p>
+
+                <p class="calendar-summary">
+                    <strong>Studied days this month:</strong>
+                    {{ studied_days }}
                 </p>
 
             </div>
 
-
-            <!-- Calendar -->
-
+            <!-- Calendar Grid -->
             <div class="calendar">
 
-                <!-- Week days -->
-
-                <div class="day-name">
-                    Mon
-                </div>
-
-                <div class="day-name">
-                    Tue
-                </div>
-
-                <div class="day-name">
-                    Wed
-                </div>
-
-                <div class="day-name">
-                    Thu
-                </div>
-
-                <div class="day-name">
-                    Fri
-                </div>
-
-                <div class="day-name">
-                    Sat
-                </div>
-
-                <div class="day-name">
-                    Sun
-                </div>
-
-
-                <!-- Calendar dates -->
+                <div class="day-name">Mon</div>
+                <div class="day-name">Tue</div>
+                <div class="day-name">Wed</div>
+                <div class="day-name">Thu</div>
+                <div class="day-name">Fri</div>
+                <div class="day-name">Sat</div>
+                <div class="day-name">Sun</div>
 
                 {% for day in calendar_days %}
 
@@ -223,26 +267,20 @@
 
                     {% else %}
 
-                        <div class="
-                            day
-                            {% if day.studied %}
-                                studied
-                            {% endif %}
-                            {% if day.today %}
-                                today
-                            {% endif %}
-                        ">
+                        <div
+                            class="day{% if day.studied %} studied{% endif %}{% if day.today %} today{% endif %}"
+                            role="button"
+                            tabindex="0"
+                            title="{{ day.date }}{% if day.studied %} — Studied{% else %} — No study record{% endif %}"
+                            onclick="showDateDetails('{{ day.date }}', {{ 'true' if day.studied else 'false' }})"
+                            onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); showDateDetails('{{ day.date }}', {{ 'true' if day.studied else 'false' }}); }">
 
                             <span class="day-number">
                                 {{ day.day }}
                             </span>
 
                             {% if day.studied %}
-
-                                <span class="study-icon">
-                                    🔥
-                                </span>
-
+                                <span class="study-icon">🔥</span>
                             {% endif %}
 
                         </div>
@@ -253,52 +291,40 @@
 
             </div>
 
-
             <!-- Legend -->
-
             <div class="legend">
 
                 <div class="legend-item">
-
                     <div class="legend-box studied-box"></div>
-
-                    <span>
-                        Studied
-                    </span>
-
+                    <span>Studied</span>
                 </div>
 
-
                 <div class="legend-item">
-
                     <div class="legend-box today-box"></div>
-
-                    <span>
-                        Today
-                    </span>
-
+                    <span>Today</span>
                 </div>
 
             </div>
 
+        </section>
+
+        <!-- Back to Dashboard -->
+        <div class="back-link">
+            <a href="{{ url_for('index') }}">← Back to Dashboard</a>
         </div>
 
+    </main>
 
-        <!-- Back -->
+    <!-- Date Interaction -->
+    <script>
+        function showDateDetails(date, studied) {
+            const message = studied
+                ? "A study record exists for " + date + "."
+                : "No study record exists for " + date + ".";
 
-        <div style="
-            text-align:center;
-            margin-top:20px;
-        ">
-
-            <a href="/">
-                ← Back to Dashboard
-            </a>
-
-        </div>
-
-    </div>
+            alert(message);
+        }
+    </script>
 
 </body>
-
 </html>
