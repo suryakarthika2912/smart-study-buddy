@@ -1,0 +1,52 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subject Insights | Smart Study Buddy</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Subject Insights</h1>
+        <p>Review your study progress by subject.</p>
+
+        <nav>
+            <a href="{{ url_for('index') }}">Dashboard</a>
+            <a href="{{ url_for('plans') }}">Study Plans</a>
+            <a href="{{ url_for('progress') }}">Progress</a>
+            <a href="{{ url_for('analytics') }}">Analytics</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        <section class="card">
+            <h2>Subject-wise Progress</h2>
+            <p>
+                Track your completed study hours and review
+                your progress on the Progress page.
+            </p>
+
+            <p>
+                <a href="{{ url_for('progress') }}">
+                    View Study Progress
+                </a>
+            </p>
+
+            <p>
+                <a href="{{ url_for('plans') }}">
+                    View Study Plans
+                </a>
+            </p>
+
+            <p>
+                <a href="{{ url_for('insights') }}">
+                    Back to Study Insights
+                </a>
+            </p>
+        </section>
+    </main>
+</body>
+</html>

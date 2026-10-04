@@ -1,0 +1,92 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Plans | Smart Study Buddy</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6fb;
+            margin: 0;
+            padding: 30px;
+            color: #222;
+        }
+        .container {
+            max-width: 1000px;
+            margin: auto;
+        }
+        h1 { color: #4338ca; }
+        .card {
+            background: white;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px #00000010;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+        }
+        th { background: #eef2ff; }
+        a {
+            display: inline-block;
+            margin: 5px;
+            color: #4338ca;
+            text-decoration: none;
+        }
+        .button {
+            background: #4338ca;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 7px;
+        }
+        .empty { color: #666; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>My Study Plans 📚</h1>
+
+    <div class="card">
+        <a class="button" href="{{ url_for('index') }}">Dashboard</a>
+        <a href="{{ url_for('add_plan') }}">Create Study Plan</a>
+        <a href="{{ url_for('progress') }}">Study Progress</a>
+    </div>
+
+    <div class="card">
+        {% if plans %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Subject</th>
+                    <th>Duration (Days)</th>
+                    <th>Daily Hours</th>
+                    <th>Total Planned Hours</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for plan in plans %}
+                <tr>
+                    <td>{{ plan.subject }}</td>
+                    <td>{{ plan.days }}</td>
+                    <td>{{ plan.daily_hours }}</td>
+                    <td>{{ plan.total_hours }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">No study plans found. Create your first study plan!</p>
+        {% endif %}
+    </div>
+</div>
+</body>
+</html>
