@@ -492,18 +492,32 @@ def add_plan():
 
 
 
-@app.route("/delete-plan/<int:plan_id>")
+@app.route("/delete-plan/<int:plan_id>", methods=["POST"])
 def delete_plan(plan_id):
     conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
 
-    cursor.execute(
-        "DELETE FROM study_plans WHERE id = ?",
-        (plan_id,)
-    )
+    try:
+        cursor = conn.cursor()
 
-    conn.commit()
-    conn.close()
+        cursor.execute(
+            "SELECT id FROM study_plans WHERE id = ?",
+            (plan_id,)
+        )
+
+        plan = cursor.fetchone()
+
+        if plan is None:
+            return "Study plan not found.", 404
+
+        cursor.execute(
+            "DELETE FROM study_plans WHERE id = ?",
+            (plan_id,)
+        )
+
+        conn.commit()
+
+    finally:
+        conn.close()
 
     return redirect(url_for("plans"))
 
