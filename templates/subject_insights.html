@@ -1,51 +1,72 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Subject Insights | Smart Study Buddy</title>
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <header>
-        <h1>Subject Insights</h1>
-        <p>Review your study progress by subject.</p>
 
-        <nav>
-            <a href="{{ url_for('index') }}">Dashboard</a>
-            <a href="{{ url_for('plans') }}">Study Plans</a>
-            <a href="{{ url_for('progress') }}">Progress</a>
-            <a href="{{ url_for('analytics') }}">Analytics</a>
-        </nav>
-    </header>
+    <!-- NAVIGATION -->
+    <nav class="navbar">
+        <a class="brand" href="{{ url_for('index') }}">📚 Smart Study Buddy</a>
+
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">🏠 Dashboard</a>
+            <a href="{{ url_for('plans') }}">📚 Study Plans</a>
+            <a href="{{ url_for('study_tasks') }}">✅ Study Tasks</a>
+            <a href="{{ url_for('progress') }}">📊 Progress</a>
+            <a href="{{ url_for('goals') }}">🎯 Goals</a>
+            <a href="{{ url_for('analytics') }}">📈 Analytics</a>
+            <a class="active" href="{{ url_for('insights') }}">💡 Insights</a>
+            <a href="{{ url_for('calendar') }}">📅 Calendar</a>
+            <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
+        </div>
+    </nav>
 
     <main class="container">
+        <header class="welcome-header">
+            <div>
+                <p class="eyebrow">SUBJECT BREAKDOWN</p>
+                <h1>Subject Insights 📚</h1>
+                <p class="subtitle">Review your study progress and focus areas by subject.</p>
+            </div>
+            <a class="button secondary" href="{{ url_for('insights') }}">
+                ← Back to Insights
+            </a>
+        </header>
+
         <section class="card">
             <h2>Subject-wise Progress</h2>
-            <p>
-                Track your completed study hours and review
-                your progress on the Progress page.
-            </p>
+            <p>Track your completed study hours and review your progress on the Progress page.</p>
 
-            <p>
-                <a href="{{ url_for('progress') }}">
-                    View Study Progress
-                </a>
-            </p>
+            {% if subjects %}
+                <div class="grid grid-2" style="margin-top: 20px;">
+                    {% for s in subjects %}
+                        <div class="card" style="box-shadow: none; border: 1px solid #edf0f6;">
+                            <h3>{{ s.name }}</h3>
+                            <p><strong>Planned:</strong> {{ "%.1f"|format(s.planned) }} hrs</p>
+                            <p><strong>Completed:</strong> {{ "%.1f"|format(s.completed) }} hrs</p>
+                            <p><strong>Remaining:</strong> {{ "%.1f"|format(s.remaining) }} hrs</p>
+                            <div class="progress" style="margin-top: 10px;">
+                                <div style="width: {{ s.progress }}%;"></div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="muted">No subject data found. Create a study plan to see subject insights.</p>
+            {% endif %}
 
-            <p>
-                <a href="{{ url_for('plans') }}">
-                    View Study Plans
+            <div style="display: flex; gap: 12px; margin-top: 20px;">
+                <a class="button primary-button" href="{{ url_for('progress') }}">
+                    📊 View Study Progress
                 </a>
-            </p>
-
-            <p>
-                <a href="{{ url_for('insights') }}">
-                    Back to Study Insights
+                <a class="button secondary" href="{{ url_for('plans') }}">
+                    📚 View Study Plans
                 </a>
-            </p>
+            </div>
         </section>
     </main>
 </body>

@@ -1,0 +1,20 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+.kilo/__pycache__/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# SQLite database files and backups
+*.db
+*.sqlite
+*.sqlite3
+study_buddy*.db
+
+# Operating System files
+.DS_Store
+Thumbs.db

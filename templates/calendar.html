@@ -207,12 +207,20 @@
 <body>
 
     <!-- Navigation -->
-    <nav>
-        <a href="{{ url_for('index') }}">🏠 Dashboard</a>
-        <a href="{{ url_for('plans') }}">📚 Study Plans</a>
-        <a href="{{ url_for('progress') }}">📊 Progress</a>
-        <a href="{{ url_for('goals') }}">🎯 Goals</a>
-        <a href="{{ url_for('calendar') }}">📅 Calendar</a>
+    <nav class="navbar">
+        <a class="brand" href="{{ url_for('index') }}">📚 Smart Study Buddy</a>
+
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">🏠 Dashboard</a>
+            <a href="{{ url_for('plans') }}">📚 Study Plans</a>
+            <a href="{{ url_for('study_tasks') }}">✅ Study Tasks</a>
+            <a href="{{ url_for('progress') }}">📊 Progress</a>
+            <a href="{{ url_for('goals') }}">🎯 Goals</a>
+            <a href="{{ url_for('analytics') }}">📈 Analytics</a>
+            <a href="{{ url_for('insights') }}">💡 Insights</a>
+            <a class="active" href="{{ url_for('calendar') }}">📅 Calendar</a>
+            <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
+        </div>
     </nav>
 
     <!-- Main Container -->

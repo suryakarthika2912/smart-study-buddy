@@ -56,16 +56,20 @@
 </head>
 
 <body>
-    <nav>
-        <a href="/">📚 Smart Study Buddy</a>
-        <a href="/">🏠 Dashboard</a>
-        <a href="/plans">📚 Study Plans</a>
-        <a href="/progress">📊 Progress</a>
-        <a href="/goals">🎯 Goals</a>
-        <a href="/analytics">📈 Analytics</a>
-        <a href="/insights">💡 Insights</a>
-        <a href="/calendar">🗓️ Calendar</a>
-        <a href="/reminders">🔔 Reminders</a>
+    <nav class="navbar">
+        <a class="brand" href="{{ url_for('index') }}">📚 Smart Study Buddy</a>
+
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">🏠 Dashboard</a>
+            <a href="{{ url_for('plans') }}">📚 Study Plans</a>
+            <a href="{{ url_for('study_tasks') }}">✅ Study Tasks</a>
+            <a href="{{ url_for('progress') }}">📊 Progress</a>
+            <a href="{{ url_for('goals') }}">🎯 Goals</a>
+            <a href="{{ url_for('analytics') }}">📈 Analytics</a>
+            <a href="{{ url_for('insights') }}">💡 Insights</a>
+            <a href="{{ url_for('calendar') }}">📅 Calendar</a>
+            <a class="active" href="{{ url_for('reminders') }}">🔔 Reminders</a>
+        </div>
     </nav>
 
     <main class="container">
@@ -77,7 +81,7 @@
                 </p>
             </div>
 
-            <a class="button" href="/goals">Manage Goals</a>
+            <a class="button" href="{{ url_for('goals') }}">Manage Goals</a>
         </div>
 
         <div class="alert">
@@ -133,7 +137,7 @@
                     {% endif %}
 
                     <div class="actions">
-                        <a class="button" href="/goals">
+                        <a class="button" href="{{ url_for('goals') }}">
                             Update Goal Progress
                         </a>
                     </div>
@@ -148,7 +152,7 @@
                     There are no urgent deadline reminders right now.
                     Keep working toward your study goals.
                 </p>
-                <a class="button" href="/goals">View My Goals</a>
+                <a class="button" href="{{ url_for('goals') }}">View My Goals</a>
             </div>
         {% endif %}
 
@@ -168,7 +172,7 @@
                 {% endfor %}
             {% else %}
                 <p>No study goals created yet.</p>
-                <a class="button" href="/goals">Create a Goal</a>
+                <a class="button" href="{{ url_for('goals') }}">Create a Goal</a>
             {% endif %}
         </div>
     </main>

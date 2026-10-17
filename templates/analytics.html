@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Study Analytics | Smart Study Buddy</title>
-
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
         * {
             box-sizing: border-box;
@@ -423,6 +423,22 @@
 </head>
 
 <body>
+    <nav class="navbar">
+        <a class="brand" href="{{ url_for('index') }}">📚 Smart Study Buddy</a>
+
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">🏠 Dashboard</a>
+            <a href="{{ url_for('plans') }}">📚 Study Plans</a>
+            <a href="{{ url_for('study_tasks') }}">✅ Study Tasks</a>
+            <a href="{{ url_for('progress') }}">📊 Progress</a>
+            <a href="{{ url_for('goals') }}">🎯 Goals</a>
+            <a class="active" href="{{ url_for('analytics') }}">📈 Analytics</a>
+            <a href="{{ url_for('insights') }}">💡 Insights</a>
+            <a href="{{ url_for('calendar') }}">📅 Calendar</a>
+            <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
+        </div>
+    </nav>
+
 <div class="page">
 
     <header class="header">
@@ -431,8 +447,8 @@
             <p>Understand your study habits and track your progress.</p>
         </div>
 
-        <a class="back-link" href="/">
-    ← Home
+        <a class="back-link" href="{{ url_for('index') }}">
+            ← Dashboard
         </a>
     </header>
 
