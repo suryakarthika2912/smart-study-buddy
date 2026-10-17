@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Create Study Plan | Smart Study Buddy</title>
-
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
         * {
             box-sizing: border-box;
@@ -16,14 +16,6 @@
             font-family: Arial, sans-serif;
             background: #f4f6fc;
             color: #1f2937;
-        }
-
-        .navbar {
-            background: #4338ca;
-            color: white;
-            padding: 18px 8%;
-            font-size: 22px;
-            font-weight: bold;
         }
 
         .container {
@@ -104,7 +96,21 @@
 </head>
 
 <body>
-    <div class="navbar">📚 Smart Study Buddy</div>
+    <nav class="navbar">
+        <a class="brand" href="{{ url_for('index') }}">📚 Smart Study Buddy</a>
+
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">🏠 Dashboard</a>
+            <a class="active" href="{{ url_for('plans') }}">📚 Study Plans</a>
+            <a href="{{ url_for('study_tasks') }}">✅ Study Tasks</a>
+            <a href="{{ url_for('progress') }}">📊 Progress</a>
+            <a href="{{ url_for('goals') }}">🎯 Goals</a>
+            <a href="{{ url_for('analytics') }}">📈 Analytics</a>
+            <a href="{{ url_for('insights') }}">💡 Insights</a>
+            <a href="{{ url_for('calendar') }}">📅 Calendar</a>
+            <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
+        </div>
+    </nav>
 
     <div class="container">
         <div class="card">

@@ -1,41 +1,74 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Goal Insights | Smart Study Buddy</title>
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <header>
-        <h1>Goal Insights</h1>
-        <p>Review your study goals and progress.</p>
 
-        <nav>
-            <a href="{{ url_for('index') }}">Dashboard</a>
-            <a href="{{ url_for('plans') }}">Study Plans</a>
-            <a href="{{ url_for('progress') }}">Progress</a>
-            <a href="{{ url_for('insights') }}">Study Insights</a>
-        </nav>
-    </header>
+    <!-- NAVIGATION -->
+    <nav class="navbar">
+        <a class="brand" href="{{ url_for('index') }}">📚 Smart Study Buddy</a>
+
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">🏠 Dashboard</a>
+            <a href="{{ url_for('plans') }}">📚 Study Plans</a>
+            <a href="{{ url_for('study_tasks') }}">✅ Study Tasks</a>
+            <a href="{{ url_for('progress') }}">📊 Progress</a>
+            <a href="{{ url_for('goals') }}">🎯 Goals</a>
+            <a href="{{ url_for('analytics') }}">📈 Analytics</a>
+            <a class="active" href="{{ url_for('insights') }}">💡 Insights</a>
+            <a href="{{ url_for('calendar') }}">📅 Calendar</a>
+            <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
+        </div>
+    </nav>
 
     <main class="container">
+        <header class="welcome-header">
+            <div>
+                <p class="eyebrow">TARGET ANALYSIS</p>
+                <h1>Goal Insights 🎯</h1>
+                <p class="subtitle">Review your study goals, completion rates, and upcoming targets.</p>
+            </div>
+            <a class="button secondary" href="{{ url_for('insights') }}">
+                ← Back to Insights
+            </a>
+        </header>
+
         <section class="card">
             <h2>Your Goals</h2>
-            <p>
-                Review your goals and update your progress
-                from the Goals page.
-            </p>
+            <p>{{ summary }}</p>
 
-            <p>
-                <a href="{{ url_for('goals') }}">View Study Goals</a>
-            </p>
+            {% if goals %}
+                <div class="grid grid-2" style="margin-top: 20px;">
+                    {% for g in goals %}
+                        <div class="card" style="box-shadow: none; border: 1px solid #edf0f6;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                                <h3 style="margin: 0;">{{ g.goal }}</h3>
+                                <span class="badge {% if g.status == 'Completed' %}green{% else %}yellow{% endif %}">
+                                    {{ g.status }}
+                                </span>
+                            </div>
+                            <p style="margin: 8px 0 4px;"><strong>Target:</strong> {{ "%.1f"|format(g.target_hours) }} hrs</p>
+                            <p style="margin: 4px 0;"><strong>Completed:</strong> {{ "%.1f"|format(g.completed_hours) }} hrs</p>
+                            <p style="margin: 4px 0;"><strong>Deadline:</strong> {{ g.deadline or 'None' }}</p>
+                            <div class="progress" style="margin-top: 10px;">
+                                <div style="width: {{ g.percentage }}%;"></div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="muted">No study goals created yet. Set a goal on the Goals page.</p>
+            {% endif %}
 
-            <p>
-                <a href="{{ url_for('insights') }}">Back to Study Insights</a>
-            </p>
+            <div style="margin-top: 20px;">
+                <a class="button primary-button" href="{{ url_for('goals') }}">
+                    🎯 Manage Study Goals
+                </a>
+            </div>
         </section>
     </main>
 </body>

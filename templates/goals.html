@@ -12,14 +12,20 @@
 
 <body>
 
-    <nav>
+    <nav class="navbar">
+        <a class="brand" href="{{ url_for('index') }}">📚 Smart Study Buddy</a>
 
-        <a href="/">🏠 Dashboard</a>
-        <a href="/plans">📚 Study Plans</a>
-        <a href="/progress">📊 Progress</a>
-        <a href="/goals">🎯 Goals</a>
-        <a href="/">💡 Recommendations</a>
-
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">🏠 Dashboard</a>
+            <a href="{{ url_for('plans') }}">📚 Study Plans</a>
+            <a href="{{ url_for('study_tasks') }}">✅ Study Tasks</a>
+            <a href="{{ url_for('progress') }}">📊 Progress</a>
+            <a class="active" href="{{ url_for('goals') }}">🎯 Goals</a>
+            <a href="{{ url_for('analytics') }}">📈 Analytics</a>
+            <a href="{{ url_for('insights') }}">💡 Insights</a>
+            <a href="{{ url_for('calendar') }}">📅 Calendar</a>
+            <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
+        </div>
     </nav>
 
 
@@ -31,6 +37,12 @@
             Set your study goals and track your progress.
         </p>
 
+        {% if error %}
+            <div class="alert danger">
+                ⚠️ {{ error }}
+            </div>
+        {% endif %}
+
 
         <!-- ================================= -->
         <!-- CREATE NEW GOAL -->
@@ -40,7 +52,7 @@
 
             <h2>➕ Create New Goal</h2>
 
-            <form action="/add-goal" method="POST">
+            <form action="{{ url_for('add_goal') }}" method="POST">
 
                 <label>
                     Goal:
@@ -389,10 +401,15 @@
                         {% if goal.status != "Completed" %}
 
                             <form
-                                action="/add-goal-progress"
+                                action="{{ url_for('add_goal_progress') }}"
                                 method="POST"
                             >
 
+                                <input
+                                    type="hidden"
+                                    name="goal_id"
+                                    value="{{ goal.id }}"
+                                >
                                 <input
                                     type="hidden"
                                     name="goal"
@@ -401,15 +418,16 @@
 
 
                                 <label>
-                                    Add Completed Hours:
+                                    Add Completed Hours (max {{ "%.1f"|format(goal.remaining_hours) }}h):
                                 </label>
 
 
                                 <input
                                     type="number"
                                     name="completed_hours"
-                                    min="0.5"
-                                    step="0.5"
+                                    min="0.1"
+                                    step="0.1"
+                                    max="{{ goal.remaining_hours }}"
                                     placeholder="Example: 2"
                                     required
                                 >

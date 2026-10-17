@@ -14,15 +14,20 @@
 
 <body>
 
-    <nav>
-        <a href="/">🏠 Dashboard</a>
-        <a href="/plans">📚 Study Plans</a>
-        <a href="/progress">📊 Progress</a>
-        <a href="/goals">🎯 Goals</a>
-        <a href="/analytics">📈 Analytics</a>
-        <a href="/insights">💡 Insights</a>
-        <a href="/calendar">🗓️ Calendar</a>
-        <a href="/reminders">🔔 Reminders</a>
+    <nav class="navbar">
+        <a class="brand" href="{{ url_for('index') }}">📚 Smart Study Buddy</a>
+
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">🏠 Dashboard</a>
+            <a href="{{ url_for('plans') }}">📚 Study Plans</a>
+            <a href="{{ url_for('study_tasks') }}">✅ Study Tasks</a>
+            <a class="active" href="{{ url_for('progress') }}">📊 Progress</a>
+            <a href="{{ url_for('goals') }}">🎯 Goals</a>
+            <a href="{{ url_for('analytics') }}">📈 Analytics</a>
+            <a href="{{ url_for('insights') }}">💡 Insights</a>
+            <a href="{{ url_for('calendar') }}">📅 Calendar</a>
+            <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
+        </div>
     </nav>
 
     <main class="container">
@@ -200,7 +205,7 @@
         </div>
 
         <p>
-            <a href="/">← Back to Dashboard</a>
+            <a href="{{ url_for('index') }}">← Back to Dashboard</a>
         </p>
 
     </main>

@@ -478,28 +478,49 @@ def plans():
 def study_tasks():
     conn = get_db_connection()
     cursor = conn.cursor()
+    error = None
 
     if request.method == "POST":
         title = request.form.get("title", "").strip()
         plan_id = request.form.get("plan_id", "").strip()
         due_date = request.form.get("due_date", "").strip() or None
 
-        if title and plan_id:
-            cursor.execute(
-                "SELECT id FROM study_plans WHERE id = ?",
-                (plan_id,)
-            )
-            plan = cursor.fetchone()
+        if not title:
+            error = "Task title is required."
+        elif not plan_id:
+            error = "Please select a study plan."
+        else:
+            try:
+                plan_id_int = int(plan_id)
+            except ValueError:
+                plan_id_int = None
 
-            if plan:
-                cursor.execute("""
-                    INSERT INTO study_tasks (plan_id, title, due_date)
-                    VALUES (?, ?, ?)
-                """, (plan_id, title, due_date))
-                conn.commit()
+            if plan_id_int is not None:
+                cursor.execute(
+                    "SELECT id FROM study_plans WHERE id = ?",
+                    (plan_id_int,)
+                )
+                plan = cursor.fetchone()
 
-        conn.close()
-        return redirect(url_for("study_tasks"))
+                if plan:
+                    if due_date:
+                        try:
+                            date.fromisoformat(due_date)
+                        except (ValueError, TypeError):
+                            error = "Invalid due date format. Please use YYYY-MM-DD."
+
+                    if not error:
+                        cursor.execute("""
+                            INSERT INTO study_tasks (plan_id, title, due_date, status)
+                            VALUES (?, ?, ?, 'Pending')
+                        """, (plan_id_int, title, due_date))
+                        conn.commit()
+                        conn.close()
+                        return redirect(url_for("study_tasks"))
+                else:
+                    error = "Selected study plan does not exist."
+            else:
+                error = "Invalid study plan selection."
 
     cursor.execute("""
         SELECT id, subject
@@ -511,6 +532,7 @@ def study_tasks():
     cursor.execute("""
         SELECT
             study_tasks.id,
+            study_tasks.plan_id,
             study_tasks.title,
             study_tasks.due_date,
             study_tasks.status,
@@ -522,12 +544,20 @@ def study_tasks():
     """)
     tasks = cursor.fetchall()
 
+    total_tasks = len(tasks)
+    pending_tasks = sum(1 for t in tasks if t["status"] == "Pending")
+    completed_tasks = sum(1 for t in tasks if t["status"] == "Completed")
+
     conn.close()
 
     return render_template(
         "study_tasks.html",
         tasks=tasks,
-        plans=plans
+        plans=plans,
+        total_tasks=total_tasks,
+        pending_tasks=pending_tasks,
+        completed_tasks=completed_tasks,
+        error=error
     )
 
 
@@ -595,7 +625,7 @@ def add_plan():
 
 @app.route("/delete-plan/<int:plan_id>", methods=["POST"])
 def delete_plan(plan_id):
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
 
     try:
         cursor = conn.cursor()
@@ -608,7 +638,14 @@ def delete_plan(plan_id):
         plan = cursor.fetchone()
 
         if plan is None:
+            conn.close()
             return "Study plan not found.", 404
+
+        # Clean up tasks associated with this plan within the same transaction
+        cursor.execute(
+            "DELETE FROM study_tasks WHERE plan_id = ?",
+            (plan_id,)
+        )
 
         cursor.execute(
             "DELETE FROM study_plans WHERE id = ?",
@@ -625,32 +662,46 @@ def delete_plan(plan_id):
 
 @app.route("/update-plan/<int:plan_id>", methods=["GET", "POST"])
 def update_plan(plan_id):
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     cursor = conn.cursor()
-
-    if request.method == "POST":
-        try:
-            priority = int(request.form["priority"])
-            days = int(request.form["days"])
-            daily_hours = float(request.form["daily_hours"])
-            if not 1 <= priority <= 5 or days < 1 or daily_hours <= 0:
-                raise ValueError
-        except (KeyError, ValueError):
-            conn.close()
-            return redirect(url_for("plans"))
-
-        cursor.execute("""
-            UPDATE study_plans SET priority = ?, days = ?, daily_hours = ?
-            WHERE id = ?
-        """, (priority, days, daily_hours, plan_id))
-        conn.commit()
-        conn.close()
-        return redirect(url_for("plans"))
 
     cursor.execute("SELECT * FROM study_plans WHERE id = ?", (plan_id,))
     plan = cursor.fetchone()
+
+    if plan is None:
+        conn.close()
+        return "Study plan not found.", 404
+
+    error = None
+    if request.method == "POST":
+        priority_raw = request.form.get("priority", "").strip()
+        days_raw = request.form.get("days", "").strip()
+        daily_hours_raw = request.form.get("daily_hours", "").strip()
+
+        try:
+            priority = int(priority_raw)
+            days = int(days_raw)
+            daily_hours = float(daily_hours_raw)
+            if not 1 <= priority <= 5:
+                error = "Priority must be between 1 and 5."
+            elif days < 1:
+                error = "Days must be at least 1."
+            elif daily_hours <= 0:
+                error = "Daily hours must be a positive number."
+        except (ValueError, TypeError):
+            error = "Please enter valid numeric values for priority, days, and daily hours."
+
+        if not error:
+            cursor.execute("""
+                UPDATE study_plans SET priority = ?, days = ?, daily_hours = ?
+                WHERE id = ?
+            """, (priority, days, daily_hours, plan_id))
+            conn.commit()
+            conn.close()
+            return redirect(url_for("plans"))
+
     conn.close()
-    return render_template("update_plan.html", plan=plan)
+    return render_template("update_plan.html", plan=plan, error=error)
 
 
 # ============================================================
@@ -723,11 +774,12 @@ def add_progress():
 
 @app.route("/goals")
 def goals():
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     cursor = conn.cursor()
     goals_data = get_goals_data(cursor)
     conn.close()
-    return render_template("goals.html", goals=goals_data)
+    error = request.args.get("error")
+    return render_template("goals.html", goals=goals_data, error=error)
 
 
 @app.route("/add-goal", methods=["POST"])
@@ -735,13 +787,21 @@ def add_goal():
     try:
         goal = request.form["goal"].strip()
         target_hours = float(request.form["target_hours"])
-        deadline = request.form.get("deadline", "").strip()
-        if not goal or target_hours <= 0:
-            return redirect(url_for("goals"))
+        deadline = request.form.get("deadline", "").strip() or None
+        if not goal:
+            return redirect(url_for("goals", error="Goal title is required."))
+        if target_hours <= 0:
+            return redirect(url_for("goals", error="Target hours must be a positive number."))
     except (KeyError, ValueError):
-        return redirect(url_for("goals"))
+        return redirect(url_for("goals", error="Please enter valid goal details."))
 
-    conn = sqlite3.connect(DATABASE)
+    if deadline:
+        try:
+            date.fromisoformat(deadline)
+        except (ValueError, TypeError):
+            return redirect(url_for("goals", error="Invalid deadline date format. Please use YYYY-MM-DD."))
+
+    conn = get_db_connection()
     conn.execute("""
         INSERT INTO study_goals (goal, target_hours, completed_hours, deadline, status)
         VALUES (?, ?, 0, ?, 'Pending')
@@ -753,52 +813,61 @@ def add_goal():
 
 @app.route("/add-goal-progress", methods=["POST"])
 def add_goal_progress():
-    goal_id = request.form.get("goal_id")
-    conn = sqlite3.connect(DATABASE)
+    goal_id_raw = request.form.get("goal_id", "").strip()
+    conn = get_db_connection()
     cursor = conn.cursor()
 
-    if goal_id:
+    goal_id = None
+    if goal_id_raw:
         try:
-            goal_id = int(goal_id)
+            goal_id = int(goal_id_raw)
         except ValueError:
-            conn.close()
-            return redirect(url_for("goals"))
-    else:
+            goal_id = None
+
+    if not goal_id:
         goal_name = request.form.get("goal", "").strip()
-        cursor.execute("""
-            SELECT id FROM study_goals WHERE goal = ? ORDER BY id DESC LIMIT 1
-        """, (goal_name,))
-        row = cursor.fetchone()
-        if not row:
-            conn.close()
-            return redirect(url_for("goals"))
-        goal_id = row[0]
+        if goal_name:
+            cursor.execute("""
+                SELECT id FROM study_goals WHERE goal = ? ORDER BY id DESC LIMIT 1
+            """, (goal_name,))
+            row = cursor.fetchone()
+            if row:
+                goal_id = row[0]
+
+    if not goal_id:
+        conn.close()
+        return redirect(url_for("goals", error="Invalid study goal selected."))
 
     try:
-        hours = float(request.form["completed_hours"])
+        hours = float(request.form.get("completed_hours", 0))
         if hours <= 0:
             raise ValueError
-    except (KeyError, ValueError):
+    except (ValueError, TypeError):
         conn.close()
-        return redirect(url_for("goals"))
+        return redirect(url_for("goals", error="Please enter a valid positive number of hours."))
 
     cursor.execute("""
-        SELECT target_hours, completed_hours, status
+        SELECT id, goal, target_hours, completed_hours, status
         FROM study_goals WHERE id = ?
     """, (goal_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
-        return redirect(url_for("goals"))
+        return redirect(url_for("goals", error="Goal not found."))
 
-    target, completed, status = row
-    target = target or 0
-    completed = completed or 0
+    goal_title = row["goal"]
+    target = float(row["target_hours"] or 0)
+    completed = float(row["completed_hours"] or 0)
+    status = row["status"]
     remaining = max(target - completed, 0)
 
-    if status == "Completed" or hours > remaining:
+    if status == "Completed":
         conn.close()
-        return redirect(url_for("goals"))
+        return redirect(url_for("goals", error=f"'{goal_title}' is already completed."))
+
+    if hours > remaining:
+        conn.close()
+        return redirect(url_for("goals", error=f"Cannot add {hours:.1f} hours to '{goal_title}'. Only {remaining:.1f} hours remaining."))
 
     new_completed = completed + hours
     new_status = "Completed" if new_completed >= target else (
@@ -1081,12 +1150,15 @@ def calendar():
     except (TypeError, ValueError):
         year, month = today.year, today.month
 
-    while month < 1:
-        month += 12
-        year -= 1
-    while month > 12:
-        month -= 12
-        year += 1
+    # Normalize month underflow/overflow (e.g. month=0 or month=13 from navigation)
+    year_delta, normalized_month = divmod(month - 1, 12)
+    year += year_delta
+    month = normalized_month + 1
+
+    # Clamp year within supported range of Python datetime.date (1..9999)
+    if not (1 <= year <= 9999):
+        year = today.year
+        month = today.month
 
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
@@ -1115,6 +1187,11 @@ def calendar():
 
     previous_year, previous_month = (year - 1, 12) if month == 1 else (year, month - 1)
     next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
+    if previous_year < 1:
+        previous_year, previous_month = 1, 1
+    if next_year > 9999:
+        next_year, next_month = 9999, 12
+
     studied_days = sum(1 for item in calendar_days if item and item["studied"])
 
     return render_template(
@@ -1162,6 +1239,60 @@ def reminders():
         reminders_data=reminders_data,
         goals=goals_data,
         message=message
+    )
+
+
+# ============================================================
+# WEEKLY PERFORMANCE
+# ============================================================
+
+@app.route("/weekly-performance")
+def weekly_performance():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    today = date.today()
+    start_date = today - timedelta(days=6)
+
+    weekly_data = []
+
+    for i in range(7):
+        current_date = start_date + timedelta(days=i)
+        date_string = current_date.isoformat()
+
+        cursor.execute("""
+            SELECT SUM(completed_hours)
+            FROM study_progress
+            WHERE DATE(added_at) = ?
+        """, (date_string,))
+
+        row = cursor.fetchone()
+        hours = float(row[0] or 0) if row else 0.0
+
+        weekly_data.append({
+            "date": current_date,
+            "day": current_date.strftime("%a"),
+            "hours": hours
+        })
+
+    conn.close()
+
+    total_hours = sum(item["hours"] for item in weekly_data)
+    daily_average = total_hours / 7.0
+    study_days = sum(1 for item in weekly_data if item["hours"] > 0)
+
+    most_productive = (
+        max(weekly_data, key=lambda item: item["hours"])
+        if study_days > 0 else None
+    )
+
+    return render_template(
+        "weekly_performance.html",
+        weekly_data=weekly_data,
+        total_hours=total_hours,
+        daily_average=daily_average,
+        study_days=study_days,
+        most_productive=most_productive
     )
 
 
