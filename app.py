@@ -59,6 +59,19 @@ def setup_database():
             study_date TEXT UNIQUE
         )
     """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS study_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plan_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            due_date TEXT,
+            status TEXT NOT NULL DEFAULT 'Pending',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (plan_id) REFERENCES study_plans(id)
+        )
+    """)
+
 
     # Add the progress-history column only if it is missing.
     try:
@@ -459,6 +472,94 @@ def plans():
     conn.close()
 
     return render_template("plans.html", plans=plans_data)
+
+
+@app.route("/study-tasks", methods=["GET", "POST"])
+def study_tasks():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        plan_id = request.form.get("plan_id", "").strip()
+        due_date = request.form.get("due_date", "").strip() or None
+
+        if title and plan_id:
+            cursor.execute(
+                "SELECT id FROM study_plans WHERE id = ?",
+                (plan_id,)
+            )
+            plan = cursor.fetchone()
+
+            if plan:
+                cursor.execute("""
+                    INSERT INTO study_tasks (plan_id, title, due_date)
+                    VALUES (?, ?, ?)
+                """, (plan_id, title, due_date))
+                conn.commit()
+
+        conn.close()
+        return redirect(url_for("study_tasks"))
+
+    cursor.execute("""
+        SELECT id, subject
+        FROM study_plans
+        ORDER BY id DESC
+    """)
+    plans = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT
+            study_tasks.id,
+            study_tasks.title,
+            study_tasks.due_date,
+            study_tasks.status,
+            study_plans.subject
+        FROM study_tasks
+        JOIN study_plans
+            ON study_tasks.plan_id = study_plans.id
+        ORDER BY study_tasks.id DESC
+    """)
+    tasks = cursor.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "study_tasks.html",
+        tasks=tasks,
+        plans=plans
+    )
+
+
+
+@app.route("/update-task-status/<int:task_id>", methods=["POST"])
+def update_task_status(task_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT status FROM study_tasks WHERE id = ?",
+        (task_id,)
+    )
+    task = cursor.fetchone()
+
+    if task:
+        new_status = (
+            "Completed"
+            if task["status"] == "Pending"
+            else "Pending"
+        )
+
+        cursor.execute(
+            "UPDATE study_tasks SET status = ? WHERE id = ?",
+            (new_status, task_id)
+        )
+        conn.commit()
+
+    conn.close()
+    return redirect(url_for("study_tasks"))
+
+
 
 
 @app.route("/add-plan", methods=["GET", "POST"])
