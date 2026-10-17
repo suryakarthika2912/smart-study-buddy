@@ -1,0 +1,105 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Tasks - Smart Study Buddy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <nav class="navbar">
+        <a class="brand" href="{{ url_for('index') }}">Smart Study Buddy</a>
+
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">Dashboard</a>
+            <a href="{{ url_for('plans') }}">Study Plans</a>
+            <a class="active" href="{{ url_for('study_tasks') }}">Study Tasks</a>
+            <a href="{{ url_for('progress') }}">Progress</a>
+            <a href="{{ url_for('goals') }}">Goals</a>
+        </div>
+    </nav>
+
+    
+<main class="container">
+    <h1>Study Tasks</h1>
+    <p>Create and manage tasks for your study plans.</p>
+
+    <div class="card">
+        <h2>Add a New Task</h2>
+
+        <form method="POST" action="{{ url_for('study_tasks') }}">
+            <label for="title">Task Title</label>
+            <input
+                type="text"
+                id="title"
+                name="title"
+                placeholder="e.g., Revise SQL joins"
+                required
+            >
+
+            <label for="plan_id">Select Study Plan</label>
+            <select id="plan_id" name="plan_id" required>
+                <option value="">Choose a subject</option>
+                {% for plan in plans %}
+                    <option value="{{ plan['id'] }}">
+                        {{ plan['subject'] }}
+                    </option>
+                {% endfor %}
+            </select>
+
+            <label for="due_date">Due Date (optional)</label>
+            <input type="date" id="due_date" name="due_date">
+
+            <button type="submit">Add Task</button>
+        </form>
+    </div>
+
+
+        {% if tasks %}
+            <div class="cards">
+                {% for task in tasks %}
+                    <div class="card">
+                        <h2>{{ task["title"] }}</h2>
+                        <p>Subject: <strong>{{ task["subject"] }}</strong></p>
+                        <p>
+                            Due date:
+                            <strong>{{ task["due_date"] or "Not set" }}</strong>
+                        </p>
+                       
+<p>
+    Status:
+    <strong>{{ task["status"] }}</strong>
+</p>
+
+<form
+    method="POST"
+    action="{{ url_for('update_task_status', task_id=task['id']) }}"
+>
+    <button type="submit">
+        {% if task["status"] == "Pending" %}
+            Mark as Completed
+        {% else %}
+            Mark as Pending
+        {% endif %}
+    </button>
+</form>
+
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="card">
+                <h2>No study tasks yet</h2>
+                <p>Your tasks will appear here when you add them.</p>
+            </div>
+        {% endif %}
+
+        <p>
+            <a href="{{ url_for('plans') }}">Back to Study Plans</a>
+        </p>
+    </main>
+
+</body>
+</html>
