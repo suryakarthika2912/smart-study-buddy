@@ -24,6 +24,16 @@
             <a href="{{ url_for('insights') }}">💡 Insights</a>
             <a href="{{ url_for('calendar') }}">📅 Calendar</a>
             <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
+        {% if is_authenticated %}
+            <span style="color: #64748b; font-weight: 600; margin-left: 10px; font-size: 0.9rem;">👤 {{ current_user }}</span>
+            <form action="{{ url_for('logout') }}" method="POST" style="display:inline; margin: 0; padding: 0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" style="padding: 5px 10px; font-size: 0.85rem; margin-left: 6px; cursor: pointer; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-weight: 500;">Logout</button>
+            </form>
+        {% else %}
+            <a href="{{ url_for('login') }}">🔑 Login</a>
+        {% endif %}
+
         </div>
     </nav>
 
@@ -178,6 +188,7 @@
                             style="display: inline;"
                             onsubmit="return confirm('Are you sure you want to delete this study plan?');"
                         >
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                             <button type="submit">
                                 🗑️ Delete

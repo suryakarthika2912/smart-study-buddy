@@ -1,93 +1,161 @@
-from flask import Flask, render_template, request, redirect, url_for
+import os
+import re
+import sys
 import sqlite3
+from db import get_db_connection, setup_database_schema, get_database_uri, is_postgres_uri
 from datetime import datetime, date, timedelta
 import calendar as pycalendar
+from functools import wraps
+from urllib.parse import urlparse, urljoin
+from flask import Flask, render_template, request, redirect, url_for, session, flash, abort
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_wtf.csrf import CSRFProtect
 
 app = Flask(__name__)
-DATABASE = "study_buddy.db"
+
+# Security & Session Configuration
+is_production = (
+    os.environ.get("RENDER") is not None
+    or os.environ.get("VERCEL") is not None
+    or os.environ.get("VERCEL_ENV") == "production"
+    or os.environ.get("FLASK_ENV") == "production"
+)
+
+secret_key = os.environ.get("SECRET_KEY", "").strip()
+if not secret_key:
+    if is_production:
+        raise RuntimeError("CRITICAL CONFIGURATION ERROR: SECRET_KEY environment variable is required in production.")
+    secret_key = "dev-insecure-secret-key-change-in-production"
+
+app.secret_key = secret_key
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+default_cookie_secure = "True" if is_production else "False"
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SESSION_COOKIE_SECURE", default_cookie_secure).lower() in ("true", "1", "t")
+
+csrf = CSRFProtect(app)
+DATABASE = get_database_uri()
 
 
 # ============================================================
 # DATABASE CONNECTION AND SETUP
 # ============================================================
 
-def get_db_connection():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 def setup_database():
-    """Create missing tables and add missing columns without resetting data."""
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS study_plans (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            subject TEXT,
-            priority INTEGER,
-            days INTEGER,
-            daily_hours REAL
-        )
-    """)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS study_progress (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            subject TEXT,
-            planned_hours REAL,
-            completed_hours REAL
-        )
-    """)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS study_goals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            goal TEXT,
-            target_hours REAL,
-            completed_hours REAL DEFAULT 0,
-            deadline TEXT,
-            status TEXT DEFAULT 'Pending'
-        )
-    """)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS study_dates (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            study_date TEXT UNIQUE
-        )
-    """)
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS study_tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            plan_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            due_date TEXT,
-            status TEXT NOT NULL DEFAULT 'Pending',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (plan_id) REFERENCES study_plans(id)
-        )
-    """)
+    """Initializes tables and columns safely on the configured database engine."""
+    setup_database_schema()
 
 
-    # Add the progress-history column only if it is missing.
+# Protect database from unapproved automatic schema modification on serverless cold starts
+if os.environ.get("AUTO_SETUP_DB") == "1" or os.environ.get("ALLOW_DEFAULT_DB_SETUP") == "1":
+    setup_database()
+
+
+def claim_legacy_records(username):
+    """Explicitly assign unowned legacy records to the designated user account."""
+    conn = get_db_connection()
     try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(?)", (username,))
+        row = cursor.fetchone()
+        if not row:
+            raise ValueError(f"User '{username}' does not exist.")
+        user_id = row[0]
+
+        cursor.execute("BEGIN IMMEDIATE")
+        summary = {}
+        for tbl in ("study_plans", "study_tasks", "study_goals", "study_progress"):
+            cursor.execute(f"UPDATE {tbl} SET user_id = ? WHERE user_id IS NULL", (user_id,))
+            summary[tbl] = cursor.rowcount
+
         cursor.execute("""
-            ALTER TABLE study_progress ADD COLUMN added_at TEXT
-        """)
-    except sqlite3.OperationalError:
-        pass
+            UPDATE study_dates
+            SET user_id = ?
+            WHERE user_id IS NULL
+              AND study_date NOT IN (SELECT study_date FROM study_dates WHERE user_id = ?)
+        """, (user_id, user_id))
+        dates_updated = cursor.rowcount
+        cursor.execute("DELETE FROM study_dates WHERE user_id IS NULL")
+        summary["study_dates"] = dates_updated
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+        return summary
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        conn.close()
 
 
 # ============================================================
-# SMALL HELPERS
+# AUTHENTICATION HELPERS & GUARDS
 # ============================================================
+
+def is_safe_url(target):
+    if not target:
+        return False
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if "user_id" not in session:
+            return redirect(url_for("login", next=request.path))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+@app.context_processor
+def inject_auth_context():
+    return {
+        "current_user": session.get("username"),
+        "current_user_id": session.get("user_id"),
+        "is_authenticated": "user_id" in session
+    }
+
+
+# ============================================================
+# SMALL HELPERS (SCOPED)
+# ============================================================
+
+def parse_date(val):
+    """
+    Safely parses a date input into a datetime.date object.
+    Accepts datetime.date, datetime.datetime, ISO date strings, or None.
+    Returns datetime.date if valid, None otherwise.
+    """
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, date):
+        return val
+    if isinstance(val, str):
+        val_str = val.strip()
+        if not val_str:
+            return None
+        try:
+            return date.fromisoformat(val_str)
+        except ValueError:
+            pass
+        try:
+            return datetime.fromisoformat(val_str).date()
+        except ValueError:
+            pass
+        if len(val_str) >= 10 and val_str[4] == '-' and val_str[7] == '-':
+            try:
+                return date.fromisoformat(val_str[:10])
+            except ValueError:
+                pass
+    return None
+
 
 def safe_percentage(completed, planned):
     if planned and planned > 0:
@@ -95,15 +163,14 @@ def safe_percentage(completed, planned):
     return 0
 
 
-def get_study_streak(cursor):
-    cursor.execute("SELECT study_date FROM study_dates ORDER BY study_date")
+def get_study_streak(cursor, user_id):
+    cursor.execute("SELECT study_date FROM study_dates WHERE user_id = ? ORDER BY study_date", (user_id,))
     dates = set()
 
     for row in cursor.fetchall():
-        try:
-            dates.add(date.fromisoformat(row[0]))
-        except (ValueError, TypeError):
-            pass
+        d = parse_date(row[0])
+        if d:
+            dates.add(d)
 
     if not dates:
         return {"current": 0, "longest": 0, "total_days": 0}
@@ -141,9 +208,8 @@ def get_deadline_status(deadline, status):
     if not deadline:
         return "No Deadline"
 
-    try:
-        deadline_date = date.fromisoformat(deadline)
-    except (ValueError, TypeError):
+    deadline_date = parse_date(deadline)
+    if not deadline_date:
         return "No Deadline"
 
     days_left = (deadline_date - date.today()).days
@@ -171,9 +237,8 @@ def get_goal_recommendation(target, completed, deadline, status):
             "recommendation": "📅 Add a deadline to get a daily study recommendation."
         }
 
-    try:
-        deadline_date = date.fromisoformat(deadline)
-    except (ValueError, TypeError):
+    deadline_date = parse_date(deadline)
+    if not deadline_date:
         return {
             "days_left": None, "remaining_hours": remaining, "daily_hours": 0,
             "recommendation": "📅 Add a valid deadline to get a daily recommendation."
@@ -207,22 +272,23 @@ def get_goal_recommendation(target, completed, deadline, status):
 
 
 # ============================================================
-# GOAL DATA
+# GOAL DATA (SCOPED)
 # ============================================================
 
-def get_goals_data(cursor=None):
+def get_goals_data(cursor=None, user_id=None):
     own_connection = cursor is None
     conn = None
 
     if own_connection:
-        conn = sqlite3.connect(DATABASE)
+        conn = get_db_connection()
         cursor = conn.cursor()
 
     cursor.execute("""
         SELECT id, goal, target_hours, completed_hours, deadline, status
         FROM study_goals
+        WHERE user_id = ?
         ORDER BY id DESC
-    """)
+    """, (user_id,))
     rows = cursor.fetchall()
     result = []
 
@@ -258,8 +324,8 @@ def get_goals_data(cursor=None):
     return result
 
 
-def get_dashboard_recommendation(cursor):
-    goals = get_goals_data(cursor)
+def get_dashboard_recommendation(cursor, user_id):
+    goals = get_goals_data(cursor, user_id=user_id)
     active = [goal for goal in goals if goal["status"] != "Completed"]
 
     if not active:
@@ -287,25 +353,25 @@ def get_dashboard_recommendation(cursor):
 
 
 # ============================================================
-# SUBJECT DATA
+# SUBJECT DATA (SCOPED)
 # ============================================================
 
-def get_subject_data(cursor):
-    # Planned hours from study plans.
+def get_subject_data(cursor, user_id):
     cursor.execute("""
         SELECT subject, SUM(days * daily_hours)
         FROM study_plans
+        WHERE user_id = ?
         GROUP BY subject
         ORDER BY subject
-    """)
+    """, (user_id,))
     planned_rows = cursor.fetchall()
 
-    # Completed hours from all saved progress records.
     cursor.execute("""
         SELECT subject, SUM(completed_hours)
         FROM study_progress
+        WHERE user_id = ?
         GROUP BY subject
-    """)
+    """, (user_id,))
     completed_rows = cursor.fetchall()
 
     planned_map = {
@@ -315,7 +381,6 @@ def get_subject_data(cursor):
         subject: float(hours or 0) for subject, hours in completed_rows
     }
 
-    # Include progress-only subjects so historical records remain visible.
     all_subjects = sorted(set(planned_map) | set(completed_map))
     subjects = []
 
@@ -352,32 +417,33 @@ def get_subject_data(cursor):
 
 
 # ============================================================
-# DASHBOARD DATA AND PAGE
+# DASHBOARD DATA (SCOPED)
 # ============================================================
 
-def get_dashboard_data():
-    conn = sqlite3.connect(DATABASE)
+def get_dashboard_data(user_id):
+    conn = get_db_connection()
     cursor = conn.cursor()
 
-    subjects = get_subject_data(cursor)
+    subjects = get_subject_data(cursor, user_id)
     total_subjects = len(subjects)
     planned_hours = sum(item["planned"] for item in subjects)
     completed_hours = sum(item["completed"] for item in subjects)
     overall_progress = safe_percentage(completed_hours, planned_hours)
 
-    cursor.execute("SELECT COUNT(*) FROM study_goals WHERE status != 'Completed'")
+    cursor.execute("SELECT COUNT(*) FROM study_goals WHERE status != 'Completed' AND user_id = ?", (user_id,))
     active_goals = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM study_goals WHERE status = 'Completed'")
+    cursor.execute("SELECT COUNT(*) FROM study_goals WHERE status = 'Completed' AND user_id = ?", (user_id,))
     completed_goals = cursor.fetchone()[0]
 
-    recommendation = get_dashboard_recommendation(cursor)
-    streak = get_study_streak(cursor)
-    goals = get_goals_data(cursor)
+    recommendation = get_dashboard_recommendation(cursor, user_id)
+    streak = get_study_streak(cursor, user_id)
+    goals = get_goals_data(cursor, user_id)
 
     cursor.execute("""
         SELECT subject, priority FROM study_plans
+        WHERE user_id = ?
         ORDER BY priority DESC, id DESC LIMIT 1
-    """)
+    """, (user_id,))
     priority_row = cursor.fetchone()
     recommendation_subject = priority_row[0] if priority_row else ""
     recommendation_priority = (priority_row[1] or 0) if priority_row else 0
@@ -385,14 +451,16 @@ def get_dashboard_data():
     today = date.today().isoformat()
     cursor.execute("""
         SELECT SUM(completed_hours) FROM study_progress
-        WHERE DATE(added_at) = ?
-    """, (today,))
+        WHERE DATE(added_at) = ? AND user_id = ?
+    """, (today, user_id))
     today_hours = cursor.fetchone()[0] or 0
 
     cursor.execute("""
         SELECT subject, completed_hours, added_at
-        FROM study_progress ORDER BY id DESC LIMIT 5
-    """)
+        FROM study_progress
+        WHERE user_id = ?
+        ORDER BY id DESC LIMIT 5
+    """, (user_id,))
     recent_progress = [
         {"subject": row[0], "hours": row[1] or 0, "added_at": row[2]}
         for row in cursor.fetchall()
@@ -429,9 +497,96 @@ def get_dashboard_data():
     }
 
 
+# ============================================================
+# AUTHENTICATION ROUTES
+# ============================================================
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if "user_id" in session:
+        return redirect(url_for("index"))
+
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not username or len(username) < 3 or len(username) > 50:
+            error = "Username must be between 3 and 50 characters."
+        elif not re.match(r"^[a-zA-Z0-9_-]+$", username):
+            error = "Username can only contain letters, numbers, hyphens, and underscores."
+        elif not password or len(password) < 8 or len(password) > 128:
+            error = "Password must be between 8 and 128 characters."
+        elif password != confirm_password:
+            error = "Passwords do not match."
+        else:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(?)", (username,))
+            if cursor.fetchone():
+                error = "Username is already taken. Please choose another."
+                conn.close()
+            else:
+                pw_hash = generate_password_hash(password)
+                cursor.execute(
+                    "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+                    (username, pw_hash)
+                )
+                conn.commit()
+                conn.close()
+                flash("Account created successfully! Please sign in.", "success")
+                return redirect(url_for("login"))
+
+    return render_template("register.html", error=error)
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if "user_id" in session:
+        return redirect(url_for("index"))
+
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, password_hash FROM users WHERE LOWER(username) = LOWER(?)", (username,))
+        user = cursor.fetchone()
+        conn.close()
+
+        if user and check_password_hash(user["password_hash"], password):
+            session.clear()
+            session["user_id"] = user["id"]
+            session["username"] = user["username"]
+
+            next_url = request.args.get("next")
+            if next_url and is_safe_url(next_url):
+                return redirect(next_url)
+            return redirect(url_for("index"))
+        else:
+            error = "Invalid username or password."
+
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout", methods=["GET", "POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
+# ============================================================
+# DASHBOARD
+# ============================================================
+
 @app.route("/")
+@login_required
 def index():
-    data = get_dashboard_data()
+    user_id = session["user_id"]
+    data = get_dashboard_data(user_id)
     return render_template(
         "index.html",
         data=data,
@@ -451,7 +606,9 @@ def index():
 # ============================================================
 
 @app.route("/plans")
+@login_required
 def plans():
+    user_id = session["user_id"]
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -465,8 +622,9 @@ def plans():
             daily_hours,
             COALESCE(days, 0) * COALESCE(daily_hours, 0) AS total_hours
         FROM study_plans
+        WHERE user_id = ?
         ORDER BY id DESC
-    """)
+    """, (user_id,))
 
     plans_data = cursor.fetchall()
     conn.close()
@@ -475,7 +633,9 @@ def plans():
 
 
 @app.route("/study-tasks", methods=["GET", "POST"])
+@login_required
 def study_tasks():
+    user_id = session["user_id"]
     conn = get_db_connection()
     cursor = conn.cursor()
     error = None
@@ -487,6 +647,8 @@ def study_tasks():
 
         if not title:
             error = "Task title is required."
+        elif len(title) > 150:
+            error = "Task title must not exceed 150 characters."
         elif not plan_id:
             error = "Please select a study plan."
         else:
@@ -496,9 +658,10 @@ def study_tasks():
                 plan_id_int = None
 
             if plan_id_int is not None:
+                # Verify that the plan belongs to the logged-in user (prevents cross-user injection)
                 cursor.execute(
-                    "SELECT id FROM study_plans WHERE id = ?",
-                    (plan_id_int,)
+                    "SELECT id FROM study_plans WHERE id = ? AND user_id = ?",
+                    (plan_id_int, user_id)
                 )
                 plan = cursor.fetchone()
 
@@ -511,23 +674,24 @@ def study_tasks():
 
                     if not error:
                         cursor.execute("""
-                            INSERT INTO study_tasks (plan_id, title, due_date, status)
-                            VALUES (?, ?, ?, 'Pending')
-                        """, (plan_id_int, title, due_date))
+                            INSERT INTO study_tasks (plan_id, user_id, title, due_date, status)
+                            VALUES (?, ?, ?, ?, 'Pending')
+                        """, (plan_id_int, user_id, title, due_date))
                         conn.commit()
                         conn.close()
                         return redirect(url_for("study_tasks"))
                 else:
-                    error = "Selected study plan does not exist."
+                    error = "Selected study plan does not exist or is not owned by you."
             else:
                 error = "Invalid study plan selection."
 
     cursor.execute("""
         SELECT id, subject
         FROM study_plans
+        WHERE user_id = ?
         ORDER BY id DESC
-    """)
-    plans = cursor.fetchall()
+    """, (user_id,))
+    user_plans = cursor.fetchall()
 
     cursor.execute("""
         SELECT
@@ -540,8 +704,9 @@ def study_tasks():
         FROM study_tasks
         JOIN study_plans
             ON study_tasks.plan_id = study_plans.id
+        WHERE study_plans.user_id = ?
         ORDER BY study_tasks.id DESC
-    """)
+    """, (user_id,))
     tasks = cursor.fetchall()
 
     total_tasks = len(tasks)
@@ -553,7 +718,7 @@ def study_tasks():
     return render_template(
         "study_tasks.html",
         tasks=tasks,
-        plans=plans,
+        plans=user_plans,
         total_tasks=total_tasks,
         pending_tasks=pending_tasks,
         completed_tasks=completed_tasks,
@@ -561,39 +726,41 @@ def study_tasks():
     )
 
 
-
 @app.route("/update-task-status/<int:task_id>", methods=["POST"])
+@login_required
 def update_task_status(task_id):
+    user_id = session["user_id"]
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT status FROM study_tasks WHERE id = ?",
-        (task_id,)
-    )
+    # Verify task ownership through parent study plan
+    cursor.execute("""
+        SELECT study_tasks.id, study_tasks.status
+        FROM study_tasks
+        JOIN study_plans ON study_tasks.plan_id = study_plans.id
+        WHERE study_tasks.id = ? AND study_plans.user_id = ?
+    """, (task_id, user_id))
     task = cursor.fetchone()
 
-    if task:
-        new_status = (
-            "Completed"
-            if task["status"] == "Pending"
-            else "Pending"
-        )
+    if not task:
+        conn.close()
+        abort(404)
 
-        cursor.execute(
-            "UPDATE study_tasks SET status = ? WHERE id = ?",
-            (new_status, task_id)
-        )
-        conn.commit()
+    new_status = "Completed" if task["status"] == "Pending" else "Pending"
 
+    cursor.execute(
+        "UPDATE study_tasks SET status = ? WHERE id = ? AND user_id = ?",
+        (new_status, task_id, user_id)
+    )
+    conn.commit()
     conn.close()
     return redirect(url_for("study_tasks"))
 
 
-
-
 @app.route("/add-plan", methods=["GET", "POST"])
+@login_required
 def add_plan():
+    user_id = session["user_id"]
     if request.method == "POST":
         subject = request.form.get("subject", "").strip()
 
@@ -606,13 +773,20 @@ def add_plan():
         if not subject or days <= 0 or daily_hours <= 0:
             return "Please enter a subject, positive number of days, and positive daily hours.", 400
 
+        if len(subject) > 100:
+            return "Subject must not exceed 100 characters.", 400
+        if days > 3650:
+            return "Days must not exceed 3,650.", 400
+        if daily_hours > 24.0:
+            return "Daily hours cannot exceed 24.", 400
+
         conn = get_db_connection()
         conn.execute(
             """
-            INSERT INTO study_plans (subject, days, daily_hours)
-            VALUES (?, ?, ?)
+            INSERT INTO study_plans (user_id, subject, days, daily_hours)
+            VALUES (?, ?, ?, ?)
             """,
-            (subject, days, daily_hours)
+            (user_id, subject, days, daily_hours)
         )
         conn.commit()
         conn.close()
@@ -622,34 +796,34 @@ def add_plan():
     return render_template("add_plan.html")
 
 
-
 @app.route("/delete-plan/<int:plan_id>", methods=["POST"])
+@login_required
 def delete_plan(plan_id):
+    user_id = session["user_id"]
     conn = get_db_connection()
 
     try:
         cursor = conn.cursor()
 
+        # Check ownership
         cursor.execute(
-            "SELECT id FROM study_plans WHERE id = ?",
-            (plan_id,)
+            "SELECT id FROM study_plans WHERE id = ? AND user_id = ?",
+            (plan_id, user_id)
         )
-
         plan = cursor.fetchone()
 
         if plan is None:
             conn.close()
-            return "Study plan not found.", 404
+            abort(404)
 
-        # Clean up tasks associated with this plan within the same transaction
         cursor.execute(
             "DELETE FROM study_tasks WHERE plan_id = ?",
             (plan_id,)
         )
 
         cursor.execute(
-            "DELETE FROM study_plans WHERE id = ?",
-            (plan_id,)
+            "DELETE FROM study_plans WHERE id = ? AND user_id = ?",
+            (plan_id, user_id)
         )
 
         conn.commit()
@@ -661,16 +835,18 @@ def delete_plan(plan_id):
 
 
 @app.route("/update-plan/<int:plan_id>", methods=["GET", "POST"])
+@login_required
 def update_plan(plan_id):
+    user_id = session["user_id"]
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM study_plans WHERE id = ?", (plan_id,))
+    cursor.execute("SELECT * FROM study_plans WHERE id = ? AND user_id = ?", (plan_id, user_id))
     plan = cursor.fetchone()
 
     if plan is None:
         conn.close()
-        return "Study plan not found.", 404
+        abort(404)
 
     error = None
     if request.method == "POST":
@@ -684,18 +860,18 @@ def update_plan(plan_id):
             daily_hours = float(daily_hours_raw)
             if not 1 <= priority <= 5:
                 error = "Priority must be between 1 and 5."
-            elif days < 1:
-                error = "Days must be at least 1."
-            elif daily_hours <= 0:
-                error = "Daily hours must be a positive number."
+            elif days < 1 or days > 3650:
+                error = "Days must be between 1 and 3,650."
+            elif daily_hours <= 0 or daily_hours > 24.0:
+                error = "Daily hours must be a positive number up to 24."
         except (ValueError, TypeError):
             error = "Please enter valid numeric values for priority, days, and daily hours."
 
         if not error:
             cursor.execute("""
                 UPDATE study_plans SET priority = ?, days = ?, daily_hours = ?
-                WHERE id = ?
-            """, (priority, days, daily_hours, plan_id))
+                WHERE id = ? AND user_id = ?
+            """, (priority, days, daily_hours, plan_id, user_id))
             conn.commit()
             conn.close()
             return redirect(url_for("plans"))
@@ -705,43 +881,49 @@ def update_plan(plan_id):
 
 
 # ============================================================
-# PROGRESS
+# PROGRESS (SCOPED)
 # ============================================================
 
 @app.route("/progress")
+@login_required
 def progress():
-    conn = sqlite3.connect(DATABASE)
+    user_id = session["user_id"]
+    conn = get_db_connection()
     cursor = conn.cursor()
-    subjects = get_subject_data(cursor)
+    subjects = get_subject_data(cursor, user_id)
     cursor.execute("""
         SELECT subject, completed_hours, added_at
-        FROM study_progress ORDER BY id DESC
-    """)
+        FROM study_progress
+        WHERE user_id = ?
+        ORDER BY id DESC
+    """, (user_id,))
     history = cursor.fetchall()
     conn.close()
     return render_template("progress.html", subjects=subjects, history=history)
 
 
 @app.route("/add-progress", methods=["POST"])
+@login_required
 def add_progress():
+    user_id = session["user_id"]
     try:
         subject = request.form["subject"].strip()
         completed_hours = float(request.form["completed_hours"])
-        if not subject or completed_hours <= 0:
+        if not subject or completed_hours <= 0 or completed_hours > 24.0:
             return redirect(url_for("progress"))
     except (KeyError, ValueError):
         return redirect(url_for("progress"))
 
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT SUM(days * daily_hours) FROM study_plans WHERE subject = ?
-    """, (subject,))
+        SELECT SUM(days * daily_hours) FROM study_plans WHERE subject = ? AND user_id = ?
+    """, (subject, user_id))
     planned = cursor.fetchone()[0] or 0
 
     cursor.execute("""
-        SELECT SUM(completed_hours) FROM study_progress WHERE subject = ?
-    """, (subject,))
+        SELECT SUM(completed_hours) FROM study_progress WHERE subject = ? AND user_id = ?
+    """, (subject, user_id))
     completed = cursor.fetchone()[0] or 0
     remaining = max(planned - completed, 0)
 
@@ -759,39 +941,45 @@ def add_progress():
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     today = date.today().isoformat()
     cursor.execute("""
-        INSERT INTO study_progress (subject, planned_hours, completed_hours, added_at)
-        VALUES (?, ?, ?, ?)
-    """, (subject, planned, completed_hours, timestamp))
-    cursor.execute("INSERT OR IGNORE INTO study_dates (study_date) VALUES (?)", (today,))
+        INSERT INTO study_progress (user_id, subject, planned_hours, completed_hours, added_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (user_id, subject, planned, completed_hours, timestamp))
+    cursor.execute("INSERT INTO study_dates (user_id, study_date) VALUES (?, ?) ON CONFLICT DO NOTHING", (user_id, today))
     conn.commit()
     conn.close()
     return redirect(url_for("progress"))
 
 
 # ============================================================
-# GOALS
+# GOALS (SCOPED)
 # ============================================================
 
 @app.route("/goals")
+@login_required
 def goals():
+    user_id = session["user_id"]
     conn = get_db_connection()
     cursor = conn.cursor()
-    goals_data = get_goals_data(cursor)
+    goals_data = get_goals_data(cursor, user_id=user_id)
     conn.close()
     error = request.args.get("error")
     return render_template("goals.html", goals=goals_data, error=error)
 
 
 @app.route("/add-goal", methods=["POST"])
+@login_required
 def add_goal():
+    user_id = session["user_id"]
     try:
         goal = request.form["goal"].strip()
         target_hours = float(request.form["target_hours"])
         deadline = request.form.get("deadline", "").strip() or None
         if not goal:
             return redirect(url_for("goals", error="Goal title is required."))
-        if target_hours <= 0:
-            return redirect(url_for("goals", error="Target hours must be a positive number."))
+        if len(goal) > 150:
+            return redirect(url_for("goals", error="Goal title must not exceed 150 characters."))
+        if target_hours <= 0 or target_hours > 100000.0:
+            return redirect(url_for("goals", error="Target hours must be a positive number up to 100,000."))
     except (KeyError, ValueError):
         return redirect(url_for("goals", error="Please enter valid goal details."))
 
@@ -803,16 +991,18 @@ def add_goal():
 
     conn = get_db_connection()
     conn.execute("""
-        INSERT INTO study_goals (goal, target_hours, completed_hours, deadline, status)
-        VALUES (?, ?, 0, ?, 'Pending')
-    """, (goal, target_hours, deadline))
+        INSERT INTO study_goals (user_id, goal, target_hours, completed_hours, deadline, status)
+        VALUES (?, ?, ?, 0, ?, 'Pending')
+    """, (user_id, goal, target_hours, deadline))
     conn.commit()
     conn.close()
     return redirect(url_for("goals"))
 
 
 @app.route("/add-goal-progress", methods=["POST"])
+@login_required
 def add_goal_progress():
+    user_id = session["user_id"]
     goal_id_raw = request.form.get("goal_id", "").strip()
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -828,8 +1018,8 @@ def add_goal_progress():
         goal_name = request.form.get("goal", "").strip()
         if goal_name:
             cursor.execute("""
-                SELECT id FROM study_goals WHERE goal = ? ORDER BY id DESC LIMIT 1
-            """, (goal_name,))
+                SELECT id FROM study_goals WHERE goal = ? AND user_id = ? ORDER BY id DESC LIMIT 1
+            """, (goal_name, user_id))
             row = cursor.fetchone()
             if row:
                 goal_id = row[0]
@@ -840,16 +1030,16 @@ def add_goal_progress():
 
     try:
         hours = float(request.form.get("completed_hours", 0))
-        if hours <= 0:
+        if hours <= 0 or hours > 24.0:
             raise ValueError
     except (ValueError, TypeError):
         conn.close()
-        return redirect(url_for("goals", error="Please enter a valid positive number of hours."))
+        return redirect(url_for("goals", error="Please enter a valid positive number of hours up to 24."))
 
     cursor.execute("""
         SELECT id, goal, target_hours, completed_hours, status
-        FROM study_goals WHERE id = ?
-    """, (goal_id,))
+        FROM study_goals WHERE id = ? AND user_id = ?
+    """, (goal_id, user_id))
     row = cursor.fetchone()
     if not row:
         conn.close()
@@ -874,23 +1064,25 @@ def add_goal_progress():
         "In Progress" if new_completed > 0 else "Pending"
     )
     cursor.execute("""
-        UPDATE study_goals SET completed_hours = ?, status = ? WHERE id = ?
-    """, (new_completed, new_status, goal_id))
+        UPDATE study_goals SET completed_hours = ?, status = ? WHERE id = ? AND user_id = ?
+    """, (new_completed, new_status, goal_id, user_id))
     conn.commit()
     conn.close()
     return redirect(url_for("goals"))
 
 
 # ============================================================
-# ANALYTICS
+# ANALYTICS & INSIGHTS (SCOPED)
 # ============================================================
 
 @app.route("/analytics")
+@login_required
 def analytics():
-    conn = sqlite3.connect(DATABASE)
+    user_id = session["user_id"]
+    conn = get_db_connection()
     cursor = conn.cursor()
 
-    subjects = get_subject_data(cursor)
+    subjects = get_subject_data(cursor, user_id)
     total_planned = sum(s["planned"] for s in subjects)
     total_completed = sum(s["completed"] for s in subjects)
     total_remaining = max(total_planned - total_completed, 0)
@@ -940,15 +1132,13 @@ def analytics():
     )
 
 
-# ============================================================
-# STUDY INSIGHTS
-# ============================================================
-
 @app.route("/insights")
+@login_required
 def insights():
+    user_id = session["user_id"]
     today = date.today()
     start_date = today - timedelta(days=13)
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     cursor = conn.cursor()
     daily_data = []
 
@@ -956,8 +1146,8 @@ def insights():
         current_date = start_date + timedelta(days=i)
         cursor.execute("""
             SELECT COALESCE(SUM(completed_hours), 0)
-            FROM study_progress WHERE DATE(added_at) = ?
-        """, (current_date.isoformat(),))
+            FROM study_progress WHERE DATE(added_at) = ? AND user_id = ?
+        """, (current_date.isoformat(), user_id))
         hours = cursor.fetchone()[0] or 0
         daily_data.append({
             "date": current_date,
@@ -965,8 +1155,8 @@ def insights():
             "hours": hours
         })
 
-    subjects = get_subject_data(cursor)
-    goals_data = get_goals_data(cursor)
+    subjects = get_subject_data(cursor, user_id)
+    goals_data = get_goals_data(cursor, user_id=user_id)
     conn.close()
 
     first_week = sum(x["hours"] for x in daily_data[:7])
@@ -1042,15 +1232,13 @@ def insights():
     )
 
 
-# ============================================================
-# SUBJECT INSIGHTS
-# ============================================================
-
 @app.route("/subject-insights")
+@login_required
 def subject_insights():
-    conn = sqlite3.connect(DATABASE)
+    user_id = session["user_id"]
+    conn = get_db_connection()
     cursor = conn.cursor()
-    subjects = get_subject_data(cursor)
+    subjects = get_subject_data(cursor, user_id)
     conn.close()
 
     total_completed = sum(s["completed"] for s in subjects)
@@ -1079,15 +1267,13 @@ def subject_insights():
     )
 
 
-# ============================================================
-# GOAL INSIGHTS
-# ============================================================
-
 @app.route("/goal-insights")
+@login_required
 def goal_insights():
-    conn = sqlite3.connect(DATABASE)
+    user_id = session["user_id"]
+    conn = get_db_connection()
     cursor = conn.cursor()
-    goals_data = get_goals_data(cursor)
+    goals_data = get_goals_data(cursor, user_id=user_id)
     conn.close()
 
     total_goals = len(goals_data)
@@ -1137,11 +1323,13 @@ def goal_insights():
 
 
 # ============================================================
-# STUDY CALENDAR
+# STUDY CALENDAR (SCOPED)
 # ============================================================
 
 @app.route("/calendar")
+@login_required
 def calendar():
+    user_id = session["user_id"]
     today = date.today()
 
     try:
@@ -1150,26 +1338,23 @@ def calendar():
     except (TypeError, ValueError):
         year, month = today.year, today.month
 
-    # Normalize month underflow/overflow (e.g. month=0 or month=13 from navigation)
     year_delta, normalized_month = divmod(month - 1, 12)
     year += year_delta
     month = normalized_month + 1
 
-    # Clamp year within supported range of Python datetime.date (1..9999)
     if not (1 <= year <= 9999):
         year = today.year
         month = today.month
 
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT study_date FROM study_dates")
+    cursor.execute("SELECT study_date FROM study_dates WHERE user_id = ?", (user_id,))
     study_dates = set()
 
     for row in cursor.fetchall():
-        try:
-            study_dates.add(date.fromisoformat(row[0]))
-        except (ValueError, TypeError):
-            pass
+        d = parse_date(row[0])
+        if d:
+            study_dates.add(d)
     conn.close()
 
     first_day = date(year, month, 1)
@@ -1209,14 +1394,16 @@ def calendar():
 
 
 # ============================================================
-# DEADLINE REMINDERS
+# DEADLINE REMINDERS (SCOPED)
 # ============================================================
 
 @app.route("/reminders")
+@login_required
 def reminders():
-    conn = sqlite3.connect(DATABASE)
+    user_id = session["user_id"]
+    conn = get_db_connection()
     cursor = conn.cursor()
-    goals_data = get_goals_data(cursor)
+    goals_data = get_goals_data(cursor, user_id=user_id)
     conn.close()
 
     reminders_data = [
@@ -1243,11 +1430,13 @@ def reminders():
 
 
 # ============================================================
-# WEEKLY PERFORMANCE
+# WEEKLY PERFORMANCE (SCOPED)
 # ============================================================
 
 @app.route("/weekly-performance")
+@login_required
 def weekly_performance():
+    user_id = session["user_id"]
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -1263,8 +1452,8 @@ def weekly_performance():
         cursor.execute("""
             SELECT SUM(completed_hours)
             FROM study_progress
-            WHERE DATE(added_at) = ?
-        """, (date_string,))
+            WHERE DATE(added_at) = ? AND user_id = ?
+        """, (date_string, user_id))
 
         row = cursor.fetchone()
         hours = float(row[0] or 0) if row else 0.0
@@ -1297,9 +1486,28 @@ def weekly_performance():
 
 
 # ============================================================
-# RUN APPLICATION
+# RUN APPLICATION / CLI COMMANDS
 # ============================================================
 
 if __name__ == "__main__":
+    if len(sys.argv) >= 2 and sys.argv[1] in ("init-db", "migrate"):
+        setup_database()
+        print("Database schema initialization complete.")
+        sys.exit(0)
+
+    if len(sys.argv) >= 3 and sys.argv[1] == "claim-legacy":
+        target_username = sys.argv[2]
+        try:
+            setup_database()
+            res = claim_legacy_records(target_username)
+            print(f"Successfully claimed legacy records for user '{target_username}': {res}")
+            sys.exit(0)
+        except Exception as ex:
+            print(f"Error claiming legacy records: {ex}", file=sys.stderr)
+            sys.exit(1)
+
     setup_database()
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    host = os.environ.get("HOST", "0.0.0.0")
+    debug = os.environ.get("FLASK_DEBUG", "False").lower() in ("true", "1", "t")
+    app.run(host=host, port=port, debug=debug)
