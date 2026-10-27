@@ -5,3 +5,7 @@ click==8.5.0
 itsdangerous==2.2.0
 MarkupSafe==3.0.4
 blinker==1.9.0
+gunicorn>=23.0.0
+Flask-WTF>=1.2.0
+WTForms>=3.2.0
+psycopg2-binary>=2.9.9
