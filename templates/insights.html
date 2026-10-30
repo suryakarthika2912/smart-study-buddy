@@ -23,10 +23,10 @@
             <a href="{{ url_for('calendar') }}">📅 Calendar</a>
             <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
         {% if is_authenticated %}
-            <span style="color: #64748b; font-weight: 600; margin-left: 10px; font-size: 0.9rem;">👤 {{ current_user }}</span>
+            <span class="user-pill">👤 {{ current_user }}</span>
             <form action="{{ url_for('logout') }}" method="POST" style="display:inline; margin: 0; padding: 0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" style="padding: 5px 10px; font-size: 0.85rem; margin-left: 6px; cursor: pointer; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-weight: 500;">Logout</button>
+                <button type="submit" class="logout-btn">Logout</button>
             </form>
         {% else %}
             <a href="{{ url_for('login') }}">🔑 Login</a>
@@ -55,13 +55,13 @@
         </header>
 
         <!-- SMART RECOMMENDATION BANNER -->
-        <div class="alert" style="display: flex; gap: 16px; align-items: center; margin-bottom: 28px; border-left: 5px solid #5865d9; background: #ffffff; box-shadow: 0 4px 15px rgba(20, 24, 40, .05);">
+        <div class="alert" style="display: flex; gap: 16px; align-items: center; margin-bottom: 28px; border: 1px solid var(--border-color); border-left: 5px solid var(--primary-lavender); background: #ffffff; box-shadow: var(--shadow-sm); border-radius: var(--radius-lg);">
             <div style="font-size: 32px;">💡</div>
             <div>
                 <strong style="font-size: 16px; display: block; margin-bottom: 4px; color: #20232a;">
                     Smart Study Suggestion
                 </strong>
-                <p style="margin: 0; color: #4338ca; font-weight: 600;">
+                <p style="margin: 0; color: var(--hover-lavender); font-weight: 600;">
                     {{ suggestion }}
                 </p>
                 <small style="color: #687080; margin-top: 4px; display: block;">
@@ -157,7 +157,7 @@
                     <strong>Daily Average:</strong> {{ "%.1f"|format(current_avg) }} hrs/day
                 </p>
 
-                <div style="display: flex; justify-content: space-between; margin-top: 20px; text-align: center; background: #f8fafc; padding: 12px; border-radius: 10px;">
+                <div style="display: flex; justify-content: space-between; margin-top: 20px; text-align: center; background: var(--bg-main); border: 1px solid var(--border-color); padding: 12px; border-radius: 10px;">
                     {% for d in current_week %}
                         <div>
                             <span class="muted" style="font-size: 11px; display: block;">{{ d.day }}</span>
@@ -179,7 +179,7 @@
                     <strong>Daily Average:</strong> {{ "%.1f"|format(previous_avg) }} hrs/day
                 </p>
 
-                <div style="display: flex; justify-content: space-between; margin-top: 20px; text-align: center; background: #f8fafc; padding: 12px; border-radius: 10px;">
+                <div style="display: flex; justify-content: space-between; margin-top: 20px; text-align: center; background: var(--bg-main); border: 1px solid var(--border-color); padding: 12px; border-radius: 10px;">
                     {% for d in previous_week %}
                         <div>
                             <span class="muted" style="font-size: 11px; display: block;">{{ d.day }}</span>

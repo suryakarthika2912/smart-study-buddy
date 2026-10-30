@@ -23,25 +23,25 @@
             <a href="{{ url_for('calendar') }}">📅 Calendar</a>
             <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
         {% if is_authenticated %}
-            <span style="color: #64748b; font-weight: 600; margin-left: 10px; font-size: 0.9rem;">👤 {{ current_user }}</span>
+            <span class="user-pill">👤 {{ current_user }}</span>
             <form action="{{ url_for('logout') }}" method="POST" style="display:inline; margin: 0; padding: 0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" style="padding: 5px 10px; font-size: 0.85rem; margin-left: 6px; cursor: pointer; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-weight: 500;">Logout</button>
+                <button type="submit" class="logout-btn">Logout</button>
             </form>
         {% else %}
             <a href="{{ url_for('login') }}">🔑 Login</a>
         {% endif %}
-
         </div>
     </nav>
 
     <main class="container">
 
+        <!-- HEADER -->
         <header class="welcome-header">
             <div>
                 <p class="eyebrow">TASK MANAGEMENT</p>
                 <h1>Study Tasks 📝</h1>
-                <p class="subtitle">Create and manage actionable tasks linked to your study plans.</p>
+                <p class="subtitle">Create and organize actionable study milestones linked directly to your subjects.</p>
             </div>
             <a class="button secondary" href="{{ url_for('plans') }}">
                 📚 Manage Study Plans
@@ -55,67 +55,80 @@
         {% endif %}
 
         <!-- TASK COUNTERS -->
-        <section class="stats-grid" style="margin-bottom: 28px;">
+        <section class="stats-grid" style="grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 28px;">
             <article class="stat-card purple">
                 <div class="stat-icon">📚</div>
                 <p>Total Tasks</p>
                 <h2>{{ total_tasks }}</h2>
-                <span>Tasks in your list</span>
+                <span>All scheduled items</span>
             </article>
 
             <article class="stat-card orange">
                 <div class="stat-icon">⏳</div>
                 <p>Pending Tasks</p>
                 <h2>{{ pending_tasks }}</h2>
-                <span>Tasks to complete</span>
+                <span>Action items remaining</span>
             </article>
 
             <article class="stat-card green">
                 <div class="stat-icon">✅</div>
                 <p>Completed Tasks</p>
                 <h2>{{ completed_tasks }}</h2>
-                <span>Tasks completed</span>
+                <span>Finished milestones</span>
             </article>
         </section>
 
         <!-- ADD A NEW TASK -->
         {% if plans %}
         <div class="card">
-            <h2>➕ Add a New Task</h2>
+            <h2 style="font-size: 20px; margin-bottom: 6px;">➕ Add a New Study Task</h2>
+            <p class="muted" style="margin-bottom: 20px;">Break down your study plans into concrete, manageable tasks.</p>
+
             <form method="POST" action="{{ url_for('study_tasks') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <label for="title">Task Title</label>
-                <input
-                    type="text"
-                    id="title"
-                    name="title"
-                    placeholder="e.g., Revise SQL joins, Solve practice problems"
-                    required
-                >
 
-                <label for="plan_id">Select Study Plan</label>
-                <select id="plan_id" name="plan_id" required>
-                    <option value="">Choose a subject</option>
-                    {% for plan in plans %}
-                        <option value="{{ plan['id'] }}">
-                            {{ plan['subject'] }}
-                        </option>
-                    {% endfor %}
-                </select>
+                <div>
+                    <label for="title">Task Title</label>
+                    <input
+                        type="text"
+                        id="title"
+                        name="title"
+                        placeholder="e.g., Revise chapter 3 formulas, Complete 10 practice questions"
+                        required
+                    >
+                </div>
 
-                <label for="due_date">Due Date (optional)</label>
-                <input type="date" id="due_date" name="due_date">
+                <div class="grid grid-2" style="margin: 0; gap: 14px;">
+                    <div>
+                        <label for="plan_id">Associated Subject Plan</label>
+                        <select id="plan_id" name="plan_id" required>
+                            <option value="">-- Choose a subject --</option>
+                            {% for plan in plans %}
+                                <option value="{{ plan['id'] }}">
+                                    📖 {{ plan['subject'] }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
-                <button type="submit" class="button primary-button" style="margin-top: 8px;">
-                    ➕ Add Task
-                </button>
+                    <div>
+                        <label for="due_date">Target Due Date (Optional)</label>
+                        <input type="date" id="due_date" name="due_date">
+                    </div>
+                </div>
+
+                <div style="margin-top: 8px;">
+                    <button type="submit" class="button primary-button">
+                        ➕ Add Task to List
+                    </button>
+                </div>
             </form>
         </div>
         {% else %}
-        <div class="card empty-state" style="text-align: center; padding: 35px 20px;">
-            <div style="font-size: 40px; margin-bottom: 12px;">📚</div>
+        <div class="card empty-state" style="padding: 45px 20px;">
+            <div style="font-size: 46px; margin-bottom: 12px;">📚</div>
             <h2>No Study Plans Found</h2>
-            <p class="muted">You need to create a study plan before you can add tasks for a subject.</p>
+            <p class="muted">You need to create at least one study plan before you can assign tasks to a subject.</p>
             <a class="button primary-button" href="{{ url_for('add_plan') }}">
                 ➕ Create a Study Plan
             </a>
@@ -123,58 +136,68 @@
         {% endif %}
 
         <!-- TASK LIST -->
-        <section style="margin-top: 30px;">
-            <h2>📋 Your Tasks</h2>
+        <section class="section-gap">
+            <div class="panel-heading" style="margin-bottom: 18px;">
+                <div>
+                    <p class="eyebrow">YOUR MILESTONES</p>
+                    <h2 style="font-size: 22px;">Tasks Overview</h2>
+                </div>
+                <span class="badge blue">{{ total_tasks }} Total</span>
+            </div>
 
             {% if tasks %}
                 <div class="grid grid-2">
                     {% for task in tasks %}
-                        <div class="card">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px;">
-                                <h3 style="margin: 0; font-size: 18px; word-break: break-word;">{{ task["title"] }}</h3>
-                                <span class="badge {% if task['status'] == 'Completed' %}green{% else %}yellow{% endif %}">
-                                    {{ task["status"] }}
-                                </span>
-                            </div>
+                        <article class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                            <div>
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px;">
+                                    <h3 style="margin: 0; font-size: 17px; word-break: break-word;">{{ task["title"] }}</h3>
+                                    <span class="badge {% if task['status'] == 'Completed' %}green{% else %}yellow{% endif %}">
+                                        {{ task["status"] }}
+                                    </span>
+                                </div>
 
-                            <p style="margin: 6px 0;">
-                                <strong>Subject:</strong> {{ task["subject"] }}
-                            </p>
-                            <p style="margin: 6px 0;" class="muted">
-                                <strong>📅 Due Date:</strong> {{ task["due_date"] or "Not set" }}
-                            </p>
+                                <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0 16px; font-size: 13.5px;">
+                                    <span class="badge blue">
+                                        📖 {{ task["subject"] }}
+                                    </span>
+                                    <span class="muted" style="display: inline-flex; align-items: center; gap: 4px;">
+                                        📅 Due: <strong>{{ task["due_date"] or "No deadline" }}</strong>
+                                    </span>
+                                </div>
+                            </div>
 
                             <form
                                 method="POST"
                                 action="{{ url_for('update_task_status', task_id=task['id']) }}"
-                                style="margin-top: 14px;"
+                                style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color);"
                             >
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button
                                     type="submit"
                                     class="button {% if task['status'] == 'Pending' %}success{% else %}secondary{% endif %}"
-                                    style="width: 100%; font-weight: bold;"
+                                    style="width: 100%;"
                                 >
                                     {% if task["status"] == "Pending" %}
                                         ✅ Mark as Completed
                                     {% else %}
-                                        ↩️ Mark as Pending
+                                        ↩️ Move to Pending
                                     {% endif %}
                                 </button>
                             </form>
-                        </div>
+                        </article>
                     {% endfor %}
                 </div>
             {% else %}
-                <div class="card empty-state" style="text-align: center; padding: 35px 20px;">
-                    <div style="font-size: 40px; margin-bottom: 12px;">📝</div>
-                    <h3>No study tasks yet</h3>
-                    <p class="muted">Your tasks will appear here once you add them above.</p>
+                <div class="card empty-state" style="padding: 40px 20px;">
+                    <div style="font-size: 42px; margin-bottom: 10px;">📝</div>
+                    <h3>No tasks created yet</h3>
+                    <p class="muted">Add your first actionable study task using the form above.</p>
                 </div>
             {% endif %}
         </section>
 
-        <p style="margin-top: 25px;">
+        <p style="margin-top: 30px;">
             <a href="{{ url_for('plans') }}">← Back to Study Plans</a>
         </p>
     </main>

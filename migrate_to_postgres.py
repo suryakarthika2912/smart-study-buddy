@@ -3,6 +3,17 @@ SQLite-to-PostgreSQL Hardened Migration Tool for Smart Study Buddy
 Supports safe, verified, non-destructive data transfer from local SQLite to Neon PostgreSQL.
 Includes baseline validation, target preflight inspection, conflict detection,
 and transactional verification before commit.
+
+LEGACY DATABASE COMPATIBILITY NOTE:
+When migrating historical SQLite databases where tables lack a `user_id` column:
+1. Source data is read without modification or column truncation.
+2. Target INSERT statements only populate the columns present in the source SQLite table.
+3. Target PostgreSQL `user_id` columns remain NULL.
+4. Behavior in Multi-User Application:
+   In `app.py`, multi-user isolation queries filter records by `WHERE user_id = session['user_id']`.
+   Records with NULL `user_id` are safely preserved in the PostgreSQL database with exact IDs
+   and fields, but will not be visible to logged-in users until/unless an explicit post-migration
+   ownership assignment script assigns them to a specific user_id.
 """
 
 import os
@@ -28,14 +39,26 @@ TABLES_IN_ORDER = [
     "study_progress"
 ]
 
-EXPECTED_BASELINE = {
-    "users": {"count": 0, "ids": []},
-    "study_plans": {"count": 3, "ids": [3, 4, 5]},
-    "study_tasks": {"count": 2, "ids": [1, 2]},
-    "study_goals": {"count": 4, "ids": [1, 2, 3, 4]},
-    "study_dates": {"count": 1, "ids": [1]},
-    "study_progress": {"count": 15, "ids": list(range(1, 16))},
+REQUIRED_TABLES = [
+    "users",
+    "study_plans",
+    "study_tasks",
+    "study_goals",
+    "study_dates",
+    "study_progress"
+]
+
+REQUIRED_COLUMNS = {
+    "users": ["id", "username", "password_hash"],
+    "study_plans": ["id", "subject", "days", "daily_hours"],
+    "study_tasks": ["id", "plan_id", "title"],
+    "study_goals": ["id", "goal", "target_hours"],
+    "study_dates": ["id", "study_date"],
+    "study_progress": ["id", "subject", "planned_hours", "completed_hours"],
 }
+
+# Retained as None for backwards-compatibility with older test suites
+EXPECTED_BASELINE = None
 
 POSTGRES_SCHEMA = {
     "users": """
@@ -134,44 +157,129 @@ def values_match(src_val, tgt_val):
     return str_src == str_tgt
 
 
-def validate_source_baseline(data):
+def validate_source_structure_and_integrity(data):
     """
-    Validates that the source data strictly matches the verified baseline:
-    Exactly 25 total records with expected table counts and primary key IDs.
-    Fails closed if the source is missing, truncated, or modified.
+    Validates structural schema and data integrity of source SQLite data:
+    1. Verifies presence of all required tables and required columns.
+    2. Verifies primary-key uniqueness (no NULL or duplicate IDs).
+    3. Verifies required foreign-key relationships:
+       - study_tasks.plan_id must reference an existing study_plans.id
+       - user_id in any table must reference an existing users.id (if user_id is not NULL)
+    Fails closed with descriptive ValueError if any structural or integrity check fails.
     """
-    total_records = sum(len(data[t]["rows"]) for t in TABLES_IN_ORDER)
-    if total_records != 25:
-        raise ValueError(
-            f"SOURCE BASELINE MISMATCH: Expected exactly 25 total records, found {total_records}."
-        )
+    # 1. Verify required tables and columns
+    for table in REQUIRED_TABLES:
+        if table not in data:
+            raise ValueError(f"SOURCE SCHEMA VALIDATION ERROR: Required table '{table}' is missing from source data.")
 
-    for table, expected in EXPECTED_BASELINE.items():
-        rows = data[table]["rows"]
+        # If users table is empty with 0 columns (legacy schema without auth),
+        # it is permitted only if no records in other tables reference user_id.
+        if table == "users" and not data["users"]["columns"]:
+            continue
+
         cols = data[table]["columns"]
-        actual_count = len(rows)
-        if actual_count != expected["count"]:
+        req_cols = REQUIRED_COLUMNS.get(table, [])
+        missing_cols = [c for c in req_cols if c not in cols]
+        if missing_cols:
             raise ValueError(
-                f"SOURCE BASELINE MISMATCH for table '{table}': "
-                f"Expected {expected['count']} records, found {actual_count}."
+                f"SOURCE SCHEMA VALIDATION ERROR: Table '{table}' is missing required column(s): {missing_cols}. "
+                f"Present columns: {cols}."
             )
-        if expected["count"] > 0:
-            if "id" not in cols:
-                raise ValueError(f"SOURCE SCHEMA MISMATCH: 'id' column missing in table '{table}'.")
-            id_idx = cols.index("id")
-            actual_ids = sorted([r[id_idx] for r in rows if r[id_idx] is not None])
-            valid_id_sets = [expected["ids"]]
-            if "alternate_ids" in expected:
-                valid_id_sets.append(expected["alternate_ids"])
-            if actual_ids not in valid_id_sets:
+
+    # 2. Check primary-key schema declaration and value uniqueness
+    for table in REQUIRED_TABLES:
+        cols = data[table].get("columns", [])
+        rows = data[table].get("rows", [])
+        pk_cols = data[table].get("pk_columns")
+
+        # Allow empty legacy users table
+        if table == "users" and not cols:
+            continue
+
+        # Check genuine SQLite primary key declaration if pk_columns metadata is available
+        if pk_cols is not None:
+            if "id" not in pk_cols:
                 raise ValueError(
-                    f"SOURCE BASELINE MISMATCH for table '{table}' IDs: "
-                    f"Expected {expected['ids']}, found {actual_ids}."
+                    f"PRIMARY KEY SCHEMA ERROR: Table '{table}' column 'id' is not declared as a PRIMARY KEY "
+                    f"in SQLite schema (declared PK columns: {pk_cols})."
+                )
+
+        if not rows or "id" not in cols:
+            continue
+        id_idx = cols.index("id")
+        ids = [r[id_idx] for r in rows]
+        if any(x is None for x in ids):
+            raise ValueError(f"PRIMARY KEY INTEGRITY ERROR: Table '{table}' contains NULL primary key id.")
+        if len(ids) != len(set(ids)):
+            seen = set()
+            duplicates = set()
+            for x in ids:
+                if x in seen:
+                    duplicates.add(x)
+                seen.add(x)
+            raise ValueError(
+                f"PRIMARY KEY INTEGRITY ERROR: Table '{table}' contains duplicate primary key IDs: {sorted(duplicates)}."
+            )
+
+    # 3. Check foreign-key relationships
+    # 3A: study_tasks.plan_id -> study_plans.id
+    if "study_tasks" in data and "study_plans" in data:
+        task_cols = data["study_tasks"]["columns"]
+        plan_cols = data["study_plans"]["columns"]
+        task_rows = data["study_tasks"]["rows"]
+        plan_rows = data["study_plans"]["rows"]
+
+        if "plan_id" in task_cols and "id" in plan_cols and task_rows:
+            plan_id_idx = plan_cols.index("id")
+            valid_plan_ids = {r[plan_id_idx] for r in plan_rows}
+            task_plan_idx = task_cols.index("plan_id")
+            task_id_idx = task_cols.index("id") if "id" in task_cols else 0
+
+            orphaned_tasks = [
+                r[task_id_idx] for r in task_rows
+                if r[task_plan_idx] is None or r[task_plan_idx] not in valid_plan_ids
+            ]
+            if orphaned_tasks:
+                raise ValueError(
+                    f"FOREIGN KEY INTEGRITY ERROR: Table 'study_tasks' contains task record(s) with IDs {orphaned_tasks} "
+                    f"referencing missing or invalid study_plans plan_id."
+                )
+
+    # 3B: user_id foreign key validation
+    valid_user_ids = set()
+    has_users_table = "users" in data and "id" in data["users"]["columns"]
+    if has_users_table:
+        u_id_idx = data["users"]["columns"].index("id")
+        valid_user_ids = {r[u_id_idx] for r in data["users"]["rows"]}
+
+    for t in ["study_plans", "study_tasks", "study_goals", "study_dates", "study_progress"]:
+        if t not in data:
+            continue
+        t_cols = data[t]["columns"]
+        t_rows = data[t]["rows"]
+        if "user_id" in t_cols and t_rows:
+            uid_idx = t_cols.index("user_id")
+            t_id_idx = t_cols.index("id") if "id" in t_cols else 0
+
+            invalid_user_refs = [
+                (r[t_id_idx], r[uid_idx]) for r in t_rows
+                if r[uid_idx] is not None and r[uid_idx] not in valid_user_ids
+            ]
+            if invalid_user_refs:
+                bad_ids = [item[0] for item in invalid_user_refs]
+                bad_uids = sorted(list({item[1] for item in invalid_user_refs}))
+                raise ValueError(
+                    f"FOREIGN KEY INTEGRITY ERROR: Table '{t}' contains record(s) with IDs {bad_ids} "
+                    f"referencing non-existent user_id(s) {bad_uids}."
                 )
 
 
+# Backwards compatibility alias
+validate_source_baseline = validate_source_structure_and_integrity
+
+
 def read_sqlite_data(sqlite_path):
-    """Safely reads data from SQLite in read-only mode and validates baseline."""
+    """Safely reads data from SQLite in read-only mode and validates structure and integrity."""
     if not os.path.exists(sqlite_path):
         raise FileNotFoundError(f"SQLite database not found at: {sqlite_path}")
 
@@ -179,38 +287,164 @@ def read_sqlite_data(sqlite_path):
     cur = conn.cursor()
 
     try:
-        # Integrity check
+        # 1. SQLite PRAGMA integrity_check
         cur.execute("PRAGMA integrity_check")
         integrity = cur.fetchone()[0]
         if integrity != "ok":
             raise RuntimeError(f"SQLite database integrity check failed: {integrity}")
 
+        # 2. SQLite PRAGMA foreign_key_check
+        cur.execute("PRAGMA foreign_key_check")
+        fk_violations = cur.fetchall()
+        if fk_violations:
+            raise RuntimeError(f"SQLite database foreign_key_check failed: {fk_violations}")
+
+        # Discover tables in SQLite
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        sqlite_tables = {row[0] for row in cur.fetchall()}
+
         data = {}
         for table in TABLES_IN_ORDER:
-            # Check if table exists in SQLite
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
-            if not cur.fetchone():
-                data[table] = {"columns": [], "rows": []}
-                continue
+            if table not in sqlite_tables:
+                if table == "users":
+                    # Allow legacy databases without users table if no records reference users
+                    data[table] = {"columns": [], "pk_columns": [], "rows": []}
+                    continue
+                else:
+                    raise ValueError(
+                        f"SOURCE SCHEMA VALIDATION ERROR: Required table '{table}' is missing from SQLite database."
+                    )
 
             cur.execute(f"PRAGMA table_info({table})")
-            columns = [row[1] for row in cur.fetchall()]
+            table_info = cur.fetchall()
+            columns = [row[1] for row in table_info]
+            pk_columns = [row[1] for row in table_info if row[5] > 0]
+
+            if not columns:
+                data[table] = {"columns": [], "pk_columns": [], "rows": []}
+                continue
 
             col_str = ", ".join([f'"{c}"' for c in columns])
-            cur.execute(f"SELECT {col_str} FROM {table} ORDER BY id ASC")
+            if "id" in columns:
+                cur.execute(f"SELECT {col_str} FROM {table} ORDER BY id ASC")
+            else:
+                cur.execute(f"SELECT {col_str} FROM {table}")
             rows = cur.fetchall()
-            data[table] = {"columns": columns, "rows": rows}
+            data[table] = {"columns": columns, "pk_columns": pk_columns, "rows": rows}
 
-        validate_source_baseline(data)
+        validate_source_structure_and_integrity(data)
         return data
     finally:
         conn.close()
 
 
-def preflight_target_check(pg_cur, confirm_disposable=False):
+POSTGRES_ALLOWED_TYPES = {
+    "id": {"integer", "bigint", "smallint"},
+    "user_id": {"integer", "bigint", "smallint"},
+    "plan_id": {"integer", "bigint", "smallint"},
+    "priority": {"integer", "bigint", "smallint"},
+    "days": {"integer", "bigint", "smallint"},
+    "daily_hours": {"real", "double precision", "numeric"},
+    "target_hours": {"real", "double precision", "numeric"},
+    "completed_hours": {"real", "double precision", "numeric"},
+    "planned_hours": {"real", "double precision", "numeric"},
+    "username": {"character varying", "text", "character"},
+    "password_hash": {"character varying", "text", "character"},
+    "title": {"character varying", "text", "character"},
+    "subject": {"character varying", "text", "character"},
+    "name": {"character varying", "text", "character"},
+    "goal": {"character varying", "text", "character"},
+    "status": {"character varying", "text", "character"},
+    "study_date": {"date", "character varying", "text", "timestamp without time zone", "timestamp with time zone"},
+    "due_date": {"date", "character varying", "text", "timestamp without time zone", "timestamp with time zone"},
+    "deadline": {"date", "character varying", "text", "timestamp without time zone", "timestamp with time zone"},
+    "created_at": {"timestamp without time zone", "timestamp with time zone", "text", "character varying", "date"},
+    "added_at": {"timestamp without time zone", "timestamp with time zone", "text", "character varying", "date"},
+}
+
+
+def inspect_target_schema_compatibility(pg_cur, source_data):
+    """
+    Inspects existing tables in the PostgreSQL target database.
+    If a table already exists in the target database, verifies:
+    1. All columns in the source data and REQUIRED_COLUMNS exist in the target table.
+    2. The target table has no extra NOT NULL columns without default values.
+    3. Column data types are compatible with required application usage.
+    Fails closed with RuntimeError if incompatible schema is detected.
+    Does NOT alter, truncate, drop, or overwrite any target tables or data.
+    """
+    pg_cur.execute("""
+        SELECT table_name, column_name, data_type, is_nullable, column_default
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = ANY(%s)
+        ORDER BY table_name, ordinal_position
+    """, (TABLES_IN_ORDER,))
+
+    rows = pg_cur.fetchall()
+    if not rows:
+        # None of the tables exist yet in target database; safe for clean DDL creation
+        return True
+
+    existing_tables = {}
+    for tbl, col, dtype, nullable, default in rows:
+        if tbl not in existing_tables:
+            existing_tables[tbl] = {}
+        existing_tables[tbl][col] = {
+            "data_type": dtype.lower() if dtype else "",
+            "is_nullable": nullable.upper() if nullable else "",
+            "column_default": default
+        }
+
+    for table, tgt_cols in existing_tables.items():
+        # 1. Missing columns: all source columns must exist in target
+        src_cols = source_data.get(table, {}).get("columns", [])
+        missing_src_cols = [c for c in src_cols if c not in tgt_cols]
+        if missing_src_cols:
+            raise RuntimeError(
+                f"TARGET SCHEMA INCOMPATIBILITY ERROR: Target PostgreSQL table '{table}' "
+                f"is missing column(s) present in source data: {missing_src_cols}. "
+                f"Target tables must match or exceed source columns. Migration aborted."
+            )
+
+        # Also verify required columns are present if the table exists
+        req_cols = REQUIRED_COLUMNS.get(table, [])
+        missing_req_cols = [c for c in req_cols if c not in tgt_cols]
+        if missing_req_cols:
+            raise RuntimeError(
+                f"TARGET SCHEMA INCOMPATIBILITY ERROR: Target PostgreSQL table '{table}' "
+                f"is missing required application column(s): {missing_req_cols}. Migration aborted."
+            )
+
+        # 2. Check for extra NOT NULL columns without default values
+        for col_name, col_meta in tgt_cols.items():
+            if col_name not in src_cols and col_name != "id":
+                if col_meta["is_nullable"] == "NO" and col_meta["column_default"] is None:
+                    raise RuntimeError(
+                        f"TARGET SCHEMA INCOMPATIBILITY ERROR: Target PostgreSQL table '{table}' "
+                        f"has a NOT NULL column '{col_name}' without a default value, which is not provided "
+                        f"by the source data. Migration aborted to prevent insertion failures."
+                    )
+
+        # 3. Check for incompatible column data types
+        for col_name, col_meta in tgt_cols.items():
+            if col_name in POSTGRES_ALLOWED_TYPES:
+                allowed = POSTGRES_ALLOWED_TYPES[col_name]
+                actual_type = col_meta["data_type"]
+                if actual_type not in allowed:
+                    raise RuntimeError(
+                        f"TARGET SCHEMA INCOMPATIBILITY ERROR: Target PostgreSQL table '{table}' "
+                        f"column '{col_name}' has incompatible type '{actual_type}' "
+                        f"(expected one of {sorted(allowed)}). Migration aborted."
+                    )
+
+    return True
+
+
+def preflight_target_check(pg_cur, confirm_disposable=False, source_data=None):
     """
     Inspects PostgreSQL target database and requires explicit confirmation
-    that it is a disposable test database.
+    that it is a disposable test database. Performs preflight schema compatibility checks.
     """
     if not confirm_disposable:
         raise RuntimeError(
@@ -222,6 +456,10 @@ def preflight_target_check(pg_cur, confirm_disposable=False):
     db_name, db_user, db_version = pg_cur.fetchone()
     print(f"Target Database: '{db_name}' (Connected as user: '{db_user}')")
     print(f"Server Version:  {db_version.split(',')[0]}")
+
+    if source_data:
+        inspect_target_schema_compatibility(pg_cur, source_data)
+        print("[OK] Target PostgreSQL schema compatibility verified for existing tables.")
 
 
 def verify_in_transaction(pg_cur, data):
@@ -290,7 +528,7 @@ def run_dry_run(sqlite_path):
     data = read_sqlite_data(sqlite_path)
 
     total_rows = 0
-    print("\nSource SQLite Schema & Baseline Verification:")
+    print("\nSource SQLite Schema & Structural Integrity Verification:")
     print("-" * 70)
     for table in TABLES_IN_ORDER:
         cols = data[table]["columns"]
@@ -298,12 +536,15 @@ def run_dry_run(sqlite_path):
         total_rows += len(rows)
         print(f"- Table '{table}': {len(rows)} row(s), {len(cols)} column(s)")
         print(f"  Columns: {', '.join(cols)}")
-        if rows:
-            max_id = max(r[cols.index("id")] for r in rows if "id" in cols and r[cols.index("id")] is not None)
+        pk_cols = data[table].get("pk_columns", [])
+        if pk_cols:
+            print(f"  Primary Key: {', '.join(pk_cols)}")
+        if rows and "id" in cols:
+            max_id = max(r[cols.index("id")] for r in rows if r[cols.index("id")] is not None)
             print(f"  Max ID: {max_id}")
 
     print("-" * 70)
-    print(f"Total rows verified against baseline: {total_rows} (Expected: 25)")
+    print(f"Total rows verified across all {len(TABLES_IN_ORDER)} tables: {total_rows}")
 
     print("\nTarget PostgreSQL DDL Plan:")
     print("-" * 70)
@@ -323,7 +564,7 @@ def run_dry_run(sqlite_path):
         else:
             print(f"-- Table '{table}' has no rows; sequence defaults to 1.")
 
-    print("\n[OK] Dry-run validation and baseline checks passed successfully. No changes were made.")
+    print(f"\n[OK] Dry-run validation and structural integrity checks passed successfully ({total_rows} total records). No changes were made.")
     return True
 
 
@@ -346,7 +587,8 @@ def run_live_migration(sqlite_path, pg_url, confirm_disposable=False):
 
     print(f"Reading source database (read-only): {sqlite_path}")
     data = read_sqlite_data(sqlite_path)
-    print("Source database baseline validated: exactly 25 records verified.")
+    total_records = sum(len(data[t]["rows"]) for t in TABLES_IN_ORDER)
+    print(f"Source database structural integrity validated: {total_records} records verified.")
 
     redacted_target = redact_pg_url(pg_url)
     print(f"Connecting to target: {redacted_target}")
@@ -356,7 +598,7 @@ def run_live_migration(sqlite_path, pg_url, confirm_disposable=False):
         pg_cur = pg_conn.cursor()
 
         # Step 0: Preflight target checks
-        preflight_target_check(pg_cur, confirm_disposable=confirm_disposable)
+        preflight_target_check(pg_cur, confirm_disposable=confirm_disposable, source_data=data)
 
         # Step 1: Create schema in transaction
         print("\nCreating PostgreSQL schema...")

@@ -1,18 +1,14 @@
-
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Progress Error - Smart Study Buddy</title>
-
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-
 <body>
 
+    <!-- NAVIGATION -->
     <nav class="navbar">
         <a class="brand" href="{{ url_for('index') }}">📚 Smart Study Buddy</a>
 
@@ -27,63 +23,60 @@
             <a href="{{ url_for('calendar') }}">📅 Calendar</a>
             <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
         {% if is_authenticated %}
-            <span style="color: #64748b; font-weight: 600; margin-left: 10px; font-size: 0.9rem;">👤 {{ current_user }}</span>
+            <span class="user-pill">👤 {{ current_user }}</span>
             <form action="{{ url_for('logout') }}" method="POST" style="display:inline; margin: 0; padding: 0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" style="padding: 5px 10px; font-size: 0.85rem; margin-left: 6px; cursor: pointer; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-weight: 500;">Logout</button>
+                <button type="submit" class="logout-btn">Logout</button>
             </form>
         {% else %}
             <a href="{{ url_for('login') }}">🔑 Login</a>
         {% endif %}
-
         </div>
     </nav>
 
-    <div class="container">
+    <main class="container" style="max-width: 680px;">
+        <div class="card" style="padding: 36px;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
+                <div style="font-size: 32px;">⚠️</div>
+                <div>
+                    <h1 style="font-size: 24px; margin: 0;">Cannot Add Progress</h1>
+                    <span class="muted" style="font-size: 13.5px;">Entered hours exceed planned target</span>
+                </div>
+            </div>
 
-        <div class="card">
+            <div class="alert warning" style="margin: 18px 0;">
+                You attempted to log <strong>{{ attempted }} hours</strong> for <strong>{{ subject }}</strong>, which exceeds the remaining planned allowance.
+            </div>
 
-            <h1>⚠️ Cannot Add Progress</h1>
+            <div class="plan-meta-grid" style="margin: 20px 0;">
+                <div class="plan-meta-col">
+                    <span>Planned Target</span>
+                    <strong>{{ planned }}h</strong>
+                </div>
+                <div class="plan-meta-col">
+                    <span>Already Completed</span>
+                    <strong style="color: #166534;">{{ completed }}h</strong>
+                </div>
+                <div class="plan-meta-col">
+                    <span>Max Allowable</span>
+                    <strong style="color: var(--hover-lavender);">{{ remaining }}h</strong>
+                </div>
+            </div>
 
-            <h2>{{ subject }}</h2>
-
-            <p>
-                You are trying to add
-                <strong>{{ attempted }}</strong>
-                hours.
+            <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.6;">
+                You can record up to <strong>{{ remaining }} more hours</strong> for this subject. If you need more time, consider updating your study plan total days or daily hours.
             </p>
 
-            <p>
-                Planned Hours:
-                <strong>{{ planned }}</strong>
-            </p>
-
-            <p>
-                Already Completed:
-                <strong>{{ completed }}</strong>
-            </p>
-
-            <p>
-                Remaining Hours:
-                <strong>{{ remaining }}</strong>
-            </p>
-
-            <p>
-                You can only add up to
-                <strong>{{ remaining }}</strong>
-                more hours.
-            </p>
-
-            <br>
-
-            <a href="{{ url_for('progress') }}">
-                ← Back to Progress
-            </a>
-
+            <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
+                <a class="button primary-button" href="{{ url_for('progress') }}">
+                    ← Return to Progress
+                </a>
+                <a class="button secondary" href="{{ url_for('plans') }}">
+                    📚 Manage Study Plans
+                </a>
+            </div>
         </div>
-
-    </div>
+    </main>
 
 </body>
-
 </html>

@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,6 +8,7 @@
 </head>
 <body>
 
+<!-- NAVIGATION -->
 <nav class="navbar">
     <a class="brand" href="{{ url_for('index') }}">📚 Smart Study Buddy</a>
 
@@ -22,77 +22,69 @@
         <a href="{{ url_for('insights') }}">💡 Insights</a>
         <a href="{{ url_for('calendar') }}">📅 Calendar</a>
         <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
-        {% if is_authenticated %}
-            <span style="color: #64748b; font-weight: 600; margin-left: 10px; font-size: 0.9rem;">👤 {{ current_user }}</span>
-            <form action="{{ url_for('logout') }}" method="POST" style="display:inline; margin: 0; padding: 0;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" style="padding: 5px 10px; font-size: 0.85rem; margin-left: 6px; cursor: pointer; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-weight: 500;">Logout</button>
-            </form>
-        {% else %}
-            <a href="{{ url_for('login') }}">🔑 Login</a>
-        {% endif %}
-
+    {% if is_authenticated %}
+        <span class="user-pill">👤 {{ current_user }}</span>
+        <form action="{{ url_for('logout') }}" method="POST" style="display:inline; margin: 0; padding: 0;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="logout-btn">Logout</button>
+        </form>
+    {% else %}
+        <a href="{{ url_for('login') }}">🔑 Login</a>
+    {% endif %}
     </div>
 </nav>
 
 <main class="container dashboard-page">
 
+    <!-- PERSONALIZED WELCOME HEADER -->
     <header class="welcome-header">
         <div>
             <p class="eyebrow">YOUR PERSONAL STUDY SPACE</p>
-            <h1>Student Dashboard 👋</h1>
-            <p class="subtitle">Plan your learning, track your progress, and reach your goals.</p>
+            <h1>Welcome back, {{ current_user or 'Scholar' }}! 👋</h1>
+            <p class="subtitle">Plan your curriculum, track study habits, and achieve your learning targets.</p>
         </div>
-        <a class="button primary-button" href="{{ url_for('plans') }}">
-            + Manage Study Plans
-        </a>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <a class="button secondary" href="{{ url_for('plans') }}">
+                📚 Study Plans
+            </a>
+            <a class="button primary-button" href="{{ url_for('progress') }}">
+                ⏱️ Record Progress
+            </a>
+        </div>
     </header>
 
-    <!-- SUMMARY CARDS -->
+    <!-- SUMMARY CARDS: Plans, Hours, Tasks, Goals -->
     <section class="stats-grid">
 
         <article class="stat-card purple">
             <div class="stat-icon">📚</div>
-            <p>Total Subjects</p>
+            <p>Study Plans</p>
             <h2>{{ data.total_subjects }}</h2>
-            <span>Subjects in your study plans</span>
+            <span>Active subjects in curriculum</span>
         </article>
 
         <article class="stat-card blue">
             <div class="stat-icon">⏱️</div>
-            <p>Planned Hours</p>
-            <h2>{{ "%.1f"|format(data.planned_hours) }}</h2>
-            <span>Your total study target</span>
+            <p>Study Hours</p>
+            <h2>{{ "%.1f"|format(data.completed_hours) }}<span style="font-size: 16px; font-weight: 500; color: var(--text-secondary);"> / {{ "%.1f"|format(data.planned_hours) }}h</span></h2>
+            <div class="mini-progress">
+                <div style="width: {{ data.overall_progress }}%"></div>
+            </div>
+            <span style="margin-top: 6px; display: inline-block;">{{ "%.0f"|format(data.overall_progress) }}% target completed</span>
         </article>
 
         <article class="stat-card green">
             <div class="stat-icon">✅</div>
-            <p>Completed Hours</p>
-            <h2>{{ "%.1f"|format(data.completed_hours) }}</h2>
-            <span>Hours recorded as completed</span>
+            <p>Completed Tasks</p>
+            <h2>{{ data.completed_tasks }}<span style="font-size: 16px; font-weight: 500; color: var(--text-secondary);"> / {{ data.total_tasks }}</span></h2>
+            <span>Actionable study tasks done</span>
         </article>
 
         <article class="stat-card orange">
             <div class="stat-icon">🎯</div>
-            <p>Overall Progress</p>
-            <h2>{{ "%.1f"|format(data.overall_progress) }}%</h2>
-            <div class="mini-progress">
-                <div style="width: {{ data.overall_progress }}%"></div>
-            </div>
-        </article>
-
-        <article class="stat-card pink">
-            <div class="stat-icon">🔥</div>
-            <p>Current Streak</p>
-            <h2>{{ data.current_streak }} days</h2>
-            <span>Consecutive study days</span>
-        </article>
-
-        <article class="stat-card teal">
-            <div class="stat-icon">🏆</div>
-            <p>Goals Completed</p>
-            <h2>{{ data.completed_goals }}</h2>
-            <span>{{ data.active_goals }} active goals remaining</span>
+            <p>Active Goals</p>
+            <h2>{{ data.active_goals }}</h2>
+            <span>{{ data.completed_goals }} completed goals</span>
         </article>
 
     </section>
@@ -103,8 +95,8 @@
         <article class="panel">
             <div class="panel-heading">
                 <div>
-                    <p class="eyebrow">YOUR PERFORMANCE</p>
-                    <h2>Study Progress</h2>
+                    <p class="eyebrow">PERFORMANCE OVERVIEW</p>
+                    <h2>Overall Progress</h2>
                 </div>
                 <a href="{{ url_for('progress') }}">View details →</a>
             </div>
@@ -114,44 +106,63 @@
                     <span>{{ "%.0f"|format(data.overall_progress) }}%</span>
                 </div>
                 <div>
-                    <h3>Keep moving forward!</h3>
-                    <p class="muted">
+                    <h3 style="margin-bottom: 6px;">Keep up the great momentum!</h3>
+                    <p class="muted" style="margin: 0;">
                         {{ "%.1f"|format(data.completed_hours) }} of
-                        {{ "%.1f"|format(data.planned_hours) }} planned hours completed.
+                        {{ "%.1f"|format(data.planned_hours) }} planned study hours recorded.
                     </p>
                 </div>
             </div>
 
             <div class="metric-row">
-                <span>Planned</span>
+                <span>Total Planned Time</span>
                 <strong>{{ "%.1f"|format(data.planned_hours) }} hrs</strong>
             </div>
             <div class="metric-row">
-                <span>Completed</span>
+                <span>Total Completed Time</span>
                 <strong>{{ "%.1f"|format(data.completed_hours) }} hrs</strong>
             </div>
             <div class="metric-row">
-                <span>Longest study streak</span>
+                <span>Current Study Streak</span>
+                <strong style="color: var(--hover-lavender);">🔥 {{ data.current_streak }} days</strong>
+            </div>
+            <div class="metric-row">
+                <span>Longest Study Streak</span>
                 <strong>{{ data.longest_streak }} days</strong>
             </div>
         </article>
 
         <article class="panel today-panel">
-            <p class="eyebrow">DAILY ACTIVITY</p>
-            <h2>Today's Study</h2>
+            <div class="panel-heading" style="margin-bottom: 12px;">
+                <div>
+                    <p class="eyebrow">DAILY FOCUS</p>
+                    <h2>Today's Activity</h2>
+                </div>
+                <span class="badge green">Active Session</span>
+            </div>
+
             <div class="today-number">
                 {{ "%.1f"|format(data.today_hours) }}
-                <span>hours</span>
+                <span>hours logged today</span>
             </div>
-            <p class="muted">Study time recorded today.</p>
+            <p class="muted">Consistent daily practice is the secret to mastery.</p>
 
-            <div class="quick-actions">
-                <a class="button primary-button" href="{{ url_for('progress') }}">
-                    + Record Progress
-                </a>
-                <a class="button secondary" href="{{ url_for('goals') }}">
-                    View Goals
-                </a>
+            <div style="margin-top: 20px;">
+                <p class="eyebrow" style="margin-bottom: 10px;">QUICK ACTIONS</p>
+                <div class="quick-actions" style="margin-top: 0;">
+                    <a class="button primary-button" href="{{ url_for('add_plan') }}" style="font-size: 13.5px; padding: 9px 14px;">
+                        ➕ New Plan
+                    </a>
+                    <a class="button secondary" href="{{ url_for('study_tasks') }}" style="font-size: 13.5px; padding: 9px 14px;">
+                        ✅ Add Task
+                    </a>
+                    <a class="button secondary" href="{{ url_for('progress') }}" style="font-size: 13.5px; padding: 9px 14px;">
+                        ⏱️ Log Hours
+                    </a>
+                    <a class="button secondary" href="{{ url_for('goals') }}" style="font-size: 13.5px; padding: 9px 14px;">
+                        🎯 Set Goal
+                    </a>
+                </div>
             </div>
         </article>
 
@@ -161,10 +172,10 @@
     <section class="panel section-gap">
         <div class="panel-heading">
             <div>
-                <p class="eyebrow">SUBJECT-WISE OVERVIEW</p>
-                <h2>Your Subjects</h2>
+                <p class="eyebrow">CURRICULUM BREAKDOWN</p>
+                <h2>Subject Progress</h2>
             </div>
-            <a href="{{ url_for('analytics') }}">View analytics →</a>
+            <a href="{{ url_for('analytics') }}">View detailed analytics →</a>
         </div>
 
         {% if data.subjects %}
@@ -172,7 +183,7 @@
                 {% for subject in data.subjects %}
                     <article class="subject-card">
                         <div class="subject-heading">
-                            <h3>{{ subject.name }}</h3>
+                            <h3>📖 {{ subject.name }}</h3>
                             <span class="badge
                                 {% if subject.status == 'On Track' %}green
                                 {% elif subject.status == 'Needs Attention' %}yellow
@@ -190,7 +201,7 @@
                             <div style="width: {{ subject.progress }}%"></div>
                         </div>
 
-                        <div class="subject-hours">
+                        <div class="subject-hours" style="margin-top: 10px;">
                             <span>{{ "%.1f"|format(subject.completed) }} hrs completed</span>
                             <span>{{ "%.1f"|format(subject.planned) }} hrs planned</span>
                         </div>
@@ -203,11 +214,11 @@
             </div>
         {% else %}
             <div class="empty-state">
-                <div>📚</div>
-                <h3>No study plans yet</h3>
-                <p>Create your first plan to see your subjects here.</p>
-                <a class="button primary-button" href="{{ url_for('plans') }}">
-                    Create a Study Plan
+                <div style="font-size: 48px; margin-bottom: 12px;">📚</div>
+                <h3>No study plans created yet</h3>
+                <p>Create your first study plan to track subjects and visualize your academic journey.</p>
+                <a class="button primary-button" href="{{ url_for('add_plan') }}">
+                    ➕ Create a Study Plan
                 </a>
             </div>
         {% endif %}
@@ -216,20 +227,21 @@
     <!-- GOALS AND RECOMMENDATION -->
     <section class="dashboard-grid section-gap">
 
+        <!-- STUDY GOALS -->
         <article class="panel">
             <div class="panel-heading">
                 <div>
-                    <p class="eyebrow">YOUR TARGETS</p>
+                    <p class="eyebrow">MILESTONES</p>
                     <h2>Study Goals</h2>
                 </div>
-                <a href="{{ url_for('goals') }}">Manage →</a>
+                <a href="{{ url_for('goals') }}">Manage goals →</a>
             </div>
 
             {% if data.goals %}
                 {% for goal in data.goals[:4] %}
                     <div class="goal-summary">
                         <div class="goal-summary-top">
-                            <strong>{{ goal.goal }}</strong>
+                            <strong>🎯 {{ goal.goal }}</strong>
                             <span>{{ "%.0f"|format(goal.percentage) }}%</span>
                         </div>
 
@@ -242,7 +254,9 @@
                                 {{ "%.1f"|format(goal.completed) }} /
                                 {{ "%.1f"|format(goal.target) }} hours
                             </span>
-                            <span>{{ goal.status }}</span>
+                            <span class="badge {% if goal.status == 'Completed' %}green{% else %}yellow{% endif %}">
+                                {{ goal.status }}
+                            </span>
                         </div>
                     </div>
                 {% endfor %}
@@ -254,23 +268,24 @@
                 <div class="empty-state compact-empty">
                     <p>You haven't created any goals yet.</p>
                     <a class="button primary-button" href="{{ url_for('goals') }}">
-                        + Create a Goal
+                        ➕ Create a Goal
                     </a>
                 </div>
             {% endif %}
         </article>
 
+        <!-- RECOMMENDATION -->
         <article class="panel recommendation-panel">
-            <p class="eyebrow">PERSONALIZED SUGGESTION</p>
+            <p class="eyebrow">SMART STUDY ADVICE</p>
             <div class="recommendation-icon">💡</div>
-            <h2>Your Study Recommendation</h2>
+            <h2>Study Recommendation</h2>
             <p>{{ data.recommendation }}</p>
 
             {% if data.recommendation_subject %}
                 <div class="focus-box">
-                    <span>Priority subject</span>
-                    <strong>{{ data.recommendation_subject }}</strong>
-                    <span>Priority level: {{ data.recommendation_priority }}/5</span>
+                    <span>Priority Focus Area</span>
+                    <strong>📖 {{ data.recommendation_subject }}</strong>
+                    <span>Priority score: ⭐ {{ data.recommendation_priority }}/5</span>
                 </div>
             {% endif %}
 
@@ -281,16 +296,17 @@
 
     </section>
 
-    <!-- RECENT PROGRESS AND DEADLINE -->
+    <!-- RECENT SESSIONS AND DEADLINES -->
     <section class="dashboard-grid section-gap">
 
+        <!-- RECENT PROGRESS -->
         <article class="panel">
             <div class="panel-heading">
                 <div>
-                    <p class="eyebrow">LATEST UPDATES</p>
+                    <p class="eyebrow">ACTIVITY LOG</p>
                     <h2>Recent Study Sessions</h2>
                 </div>
-                <a href="{{ url_for('progress') }}">View all →</a>
+                <a href="{{ url_for('progress') }}">View full log →</a>
             </div>
 
             {% if data.recent_progress %}
@@ -299,7 +315,7 @@
                         <div class="recent-icon">📖</div>
                         <div class="recent-info">
                             <strong>{{ item.subject }}</strong>
-                            <span>{{ item.added_at or 'Date unavailable' }}</span>
+                            <span>{{ item.added_at or 'Date recorded' }}</span>
                         </div>
                         <strong class="recent-hours">
                             +{{ "%.1f"|format(item.hours) }} hrs
@@ -309,11 +325,14 @@
             {% else %}
                 <div class="empty-state compact-empty">
                     <p>No study sessions recorded yet.</p>
-                    <a href="{{ url_for('progress') }}">Record your first session →</a>
+                    <a class="button secondary" href="{{ url_for('progress') }}">
+                        Log your first session →
+                    </a>
                 </div>
             {% endif %}
         </article>
 
+        <!-- UPCOMING DEADLINE -->
         <article class="panel">
             <div class="panel-heading">
                 <div>
@@ -325,41 +344,44 @@
 
             {% if data.nearest_deadline %}
                 <div class="deadline-icon">📅</div>
-                <h3>{{ data.nearest_deadline.goal }}</h3>
+                <h3 style="font-size: 20px; margin-bottom: 6px;">{{ data.nearest_deadline.goal }}</h3>
                 <p class="muted">
-                    Deadline: {{ data.nearest_deadline.deadline or 'Not set' }}
+                    Target deadline: <strong>{{ data.nearest_deadline.deadline or 'Not set' }}</strong>
                 </p>
                 <div class="deadline-detail">
                     <div>
                         <span>Time remaining</span>
-                        <strong>
+                        <strong style="color: var(--hover-lavender);">
                             {% if data.nearest_deadline.days_left == 0 %}
-                                Due today
+                                Due today!
                             {% else %}
-                                {{ data.nearest_deadline.days_left }} days
+                                {{ data.nearest_deadline.days_left }} days left
                             {% endif %}
                         </strong>
                     </div>
                     <div>
                         <span>Hours remaining</span>
                         <strong>
-                            {{ "%.1f"|format(data.nearest_deadline.remaining_hours) }}
+                            {{ "%.1f"|format(data.nearest_deadline.remaining_hours) }} hrs
                         </strong>
                     </div>
                 </div>
             {% else %}
                 <div class="empty-state compact-empty">
-                    <div>🌿</div>
-                    <p>No upcoming deadlines found.</p>
-                    <a href="{{ url_for('goals') }}">Create a goal with a deadline →</a>
+                    <div style="font-size: 38px; margin-bottom: 8px;">🌿</div>
+                    <p>No active deadlines found.</p>
+                    <a class="button secondary" href="{{ url_for('goals') }}">
+                        Create a goal with a deadline →
+                    </a>
                 </div>
             {% endif %}
         </article>
 
     </section>
 
+    <!-- FOOTER -->
     <footer class="dashboard-footer">
-        <p>📚 Smart Study Buddy · Small steps every day lead to big achievements.</p>
+        <p>📚 Smart Study Buddy · Consistent focus every day builds your future.</p>
     </footer>
 
 </main>

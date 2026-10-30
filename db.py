@@ -176,6 +176,12 @@ class DBCursorWrapper:
         except Exception:
             pass
 
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
 
 class DBConnectionWrapper:
     """Connection wrapper ensuring uniform commit, rollback, and dict-like row access."""
@@ -240,6 +246,12 @@ class DBConnectionWrapper:
                 raw_conn.close()
             except Exception:
                 pass
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def __enter__(self):
         return self
