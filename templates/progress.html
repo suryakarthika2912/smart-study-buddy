@@ -1,19 +1,14 @@
-
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>Study Progress - Smart Study Buddy</title>
-
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-
 <body>
 
+    <!-- NAVIGATION -->
     <nav class="navbar">
         <a class="brand" href="{{ url_for('index') }}">📚 Smart Study Buddy</a>
 
@@ -28,194 +23,170 @@
             <a href="{{ url_for('calendar') }}">📅 Calendar</a>
             <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
         {% if is_authenticated %}
-            <span style="color: #64748b; font-weight: 600; margin-left: 10px; font-size: 0.9rem;">👤 {{ current_user }}</span>
+            <span class="user-pill">👤 {{ current_user }}</span>
             <form action="{{ url_for('logout') }}" method="POST" style="display:inline; margin: 0; padding: 0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" style="padding: 5px 10px; font-size: 0.85rem; margin-left: 6px; cursor: pointer; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-weight: 500;">Logout</button>
+                <button type="submit" class="logout-btn">Logout</button>
             </form>
         {% else %}
             <a href="{{ url_for('login') }}">🔑 Login</a>
         {% endif %}
-
         </div>
     </nav>
 
     <main class="container">
 
-        <h1>📊 Study Progress</h1>
-
-        <p class="subtitle">
-            Track your subject-wise study progress and update completed hours.
-        </p>
+        <!-- HEADER -->
+        <header class="welcome-header">
+            <div>
+                <p class="eyebrow">STUDY TRACKING</p>
+                <h1>📊 Study Progress</h1>
+                <p class="subtitle">Track your subject-wise study progress, log completed hours, and monitor your academic journey.</p>
+            </div>
+            <a class="button secondary" href="{{ url_for('plans') }}">
+                📚 Manage Study Plans
+            </a>
+        </header>
 
         <!-- SUBJECT PROGRESS -->
-
         {% if subjects %}
-
             <div class="grid grid-2">
-
                 {% for subject in subjects %}
-
-                    <div class="card">
-
-                        <h2>{{ subject.name }}</h2>
-
-                        <div style="display:flex;
-                                    justify-content:space-between;
-                                    gap:12px;">
-
-                            <span class="muted">Overall progress</span>
-
-                            <strong>
-                                {{ "%.1f"|format(subject.progress) }}%
-                            </strong>
-
-                        </div>
-
-                        <div class="progress" style="margin:12px 0;">
-                            <div style="width:{{ subject.progress }}%;"></div>
-                        </div>
-
-                        <p>
-                            <strong>Planned:</strong>
-                            {{ "%.2f"|format(subject.planned) }} hours
-                        </p>
-
-                        <p>
-                            <strong>Completed:</strong>
-                            {{ "%.2f"|format(subject.completed) }} hours
-                        </p>
-
-                        <p>
-                            <strong>Remaining:</strong>
-                            {{ "%.2f"|format(subject.remaining) }} hours
-                        </p>
-
-                        <p>
-                            <span class="badge
-                                {% if subject.status == 'On Track' %}green
-                                {% elif subject.status == 'Needs Attention' %}yellow
-                                {% elif subject.status == 'Behind' %}red
-                                {% else %}blue{% endif %}">
-                                {{ subject.status_icon }} {{ subject.status }}
-                            </span>
-                        </p>
-
-                        <hr style="border:0;border-top:1px solid #eceef3;margin:20px 0;">
-
-                        <h3>➕ Record Study Progress</h3>
-
-                        {% if subject.remaining > 0 %}
-
-                            <form action="{{ url_for('add_progress') }}"
-                                  method="POST">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-                                <input type="hidden"
-                                       name="subject"
-                                       value="{{ subject.name }}">
-
-                                <label for="hours-{{ loop.index }}">
-                                    Additional completed hours
-                                </label>
-
-                                <input
-                                    id="hours-{{ loop.index }}"
-                                    type="number"
-                                    name="completed_hours"
-                                    min="0.1"
-                                    step="0.1"
-                                    max="{{ subject.remaining }}"
-                                    placeholder="Example: 2"
-                                    required>
-
-                                <button type="submit">
-                                    Save Progress
-                                </button>
-
-                            </form>
-
-                        {% else %}
-
-                            <div class="alert success">
-                                🎉 Planned hours completed for this subject!
+                    <article class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px;">
+                                <h2 style="margin: 0; font-size: 20px;">📖 {{ subject.name }}</h2>
+                                <span class="badge
+                                    {% if subject.status == 'On Track' %}green
+                                    {% elif subject.status == 'Needs Attention' %}yellow
+                                    {% elif subject.status == 'Behind' %}red
+                                    {% else %}blue{% endif %}">
+                                    {{ subject.status_icon }} {{ subject.status }}
+                                </span>
                             </div>
 
-                        {% endif %}
+                            <div style="display: flex; justify-content: space-between; align-items: baseline; margin: 16px 0 8px;">
+                                <span class="muted" style="font-size: 13px;">Completion Rate</span>
+                                <strong style="font-size: 22px; color: var(--hover-lavender);">
+                                    {{ "%.1f"|format(subject.progress) }}%
+                                </strong>
+                            </div>
 
-                    </div>
+                            <div class="progress" style="margin-bottom: 16px;">
+                                <div style="width: {{ subject.progress }}%;"></div>
+                            </div>
 
+                            <!-- HOURS BREAKDOWN -->
+                            <div class="plan-meta-grid" style="margin: 14px 0 20px;">
+                                <div class="plan-meta-col">
+                                    <span>Planned</span>
+                                    <strong>{{ "%.1f"|format(subject.planned) }}h</strong>
+                                </div>
+                                <div class="plan-meta-col">
+                                    <span>Completed</span>
+                                    <strong style="color: #166534;">{{ "%.1f"|format(subject.completed) }}h</strong>
+                                </div>
+                                <div class="plan-meta-col">
+                                    <span>Remaining</span>
+                                    <strong>{{ "%.1f"|format(subject.remaining) }}h</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- RECORD PROGRESS FORM -->
+                        <div style="border-top: 1px solid var(--border-color); padding-top: 18px; margin-top: 8px;">
+                            <h3 style="font-size: 16px; margin-bottom: 10px;">⏱️ Record Study Session</h3>
+
+                            {% if subject.remaining > 0 %}
+                                <form action="{{ url_for('add_progress') }}" method="POST">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="subject" value="{{ subject.name }}">
+
+                                    <div>
+                                        <label for="hours-{{ loop.index }}" style="font-size: 13px;">
+                                            Additional completed hours (Max: {{ "%.1f"|format(subject.remaining) }}h)
+                                        </label>
+                                        <div style="display: flex; gap: 8px; margin-top: 6px;">
+                                            <input
+                                                id="hours-{{ loop.index }}"
+                                                type="number"
+                                                name="completed_hours"
+                                                min="0.1"
+                                                step="0.1"
+                                                max="{{ subject.remaining }}"
+                                                placeholder="e.g., 1.5"
+                                                required
+                                                style="flex: 1;"
+                                            >
+                                            <button type="submit" class="button primary-button" style="padding: 10px 18px; white-space: nowrap;">
+                                                Log Hours
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            {% else %}
+                                <div class="alert success" style="margin-bottom: 0;">
+                                    🎉 Target completed! Outstanding dedication on this subject.
+                                </div>
+                            {% endif %}
+                        </div>
+                    </article>
                 {% endfor %}
-
             </div>
-
         {% else %}
-
-            <div class="card">
-                <h2>📚 No Study Plans Yet</h2>
-                <p>Create a study plan before recording subject progress.</p>
-                <a class="button" href="{{ url_for('plans') }}">
-                    Manage Study Plans
+            <div class="card empty-state" style="padding: 50px 20px;">
+                <div style="font-size: 48px; margin-bottom: 12px;">📚</div>
+                <h2>No Study Plans Yet</h2>
+                <p class="muted">Create a study plan first before you can record your subject study progress.</p>
+                <a class="button primary-button" href="{{ url_for('plans') }}">
+                    ➕ Manage Study Plans
                 </a>
             </div>
-
         {% endif %}
 
-
         <!-- PROGRESS HISTORY -->
-
-        <div class="card">
-
-            <h2>🕒 Progress History</h2>
-
-            <p class="muted">
-                Your recorded study sessions.
-            </p>
+        <section class="card section-gap">
+            <div class="panel-heading" style="margin-bottom: 16px;">
+                <div>
+                    <p class="eyebrow">ACTIVITY LOG</p>
+                    <h2 style="font-size: 20px;">🕒 Recent Study History</h2>
+                </div>
+                <span class="badge blue">{{ history|length }} Sessions Logged</span>
+            </div>
 
             {% if history %}
-
-                <div style="overflow-x:auto;">
-
+                <div style="overflow-x: auto;">
                     <table>
                         <thead>
                             <tr>
                                 <th>Subject</th>
-                                <th>Hours Completed</th>
-                                <th>Date and Time</th>
+                                <th>Hours Logged</th>
+                                <th>Timestamp</th>
                             </tr>
                         </thead>
-
                         <tbody>
                             {% for item in history %}
                                 <tr>
-                                    <td>{{ item[0] }}</td>
-
+                                    <td><strong>📖 {{ item[0] }}</strong></td>
                                     <td>
-                                        {{ "%.2f"|format(item[1] or 0) }}
-                                        hours
+                                        <span class="badge green">
+                                            +{{ "%.2f"|format(item[1] or 0) }} hours
+                                        </span>
                                     </td>
-
-                                    <td>
-                                        {{ item[2] or "Not available" }}
-                                    </td>
+                                    <td class="muted">{{ item[2] or "Timestamp unavailable" }}</td>
                                 </tr>
                             {% endfor %}
                         </tbody>
                     </table>
-
                 </div>
-
             {% else %}
-
-                <div class="alert">
-                    No progress history yet. Record your first study session above!
+                <div class="alert" style="margin-bottom: 0;">
+                    No progress sessions recorded yet. Log your first study session above!
                 </div>
-
             {% endif %}
+        </section>
 
-        </div>
-
-        <p>
+        <p style="margin-top: 30px;">
             <a href="{{ url_for('index') }}">← Back to Dashboard</a>
         </p>
 

@@ -1,16 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Study Plans - Smart Study Buddy</title>
-
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-
 <body>
 
+    <!-- NAVIGATION -->
     <nav class="navbar">
         <a class="brand" href="{{ url_for('index') }}">📚 Smart Study Buddy</a>
 
@@ -25,310 +23,228 @@
             <a href="{{ url_for('calendar') }}">📅 Calendar</a>
             <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
         {% if is_authenticated %}
-            <span style="color: #64748b; font-weight: 600; margin-left: 10px; font-size: 0.9rem;">👤 {{ current_user }}</span>
+            <span class="user-pill">👤 {{ current_user }}</span>
             <form action="{{ url_for('logout') }}" method="POST" style="display:inline; margin: 0; padding: 0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" style="padding: 5px 10px; font-size: 0.85rem; margin-left: 6px; cursor: pointer; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-weight: 500;">Logout</button>
+                <button type="submit" class="logout-btn">Logout</button>
             </form>
         {% else %}
             <a href="{{ url_for('login') }}">🔑 Login</a>
         {% endif %}
-
         </div>
     </nav>
 
-
+    <!-- MAIN CONTENT -->
     <main class="container">
 
-        <section>
+        <!-- HEADER -->
+        <header class="welcome-header">
+            <div>
+                <p class="eyebrow">ACADEMIC PLANNING</p>
+                <h1>📚 My Study Plans</h1>
+                <p class="subtitle">Design your personalized learning curriculum, schedule study days, and monitor target hours.</p>
+            </div>
+            <a class="button primary-button" href="{{ url_for('add_plan') }}">
+                ➕ Create Study Plan
+            </a>
+        </header>
 
-            <h1>📚 My Study Plans</h1>
+        {% if plans %}
 
-            <p>View and manage all your study plans.</p>
+        <!-- SUMMARY STATS -->
+        {% set summary = namespace(total_days=0, total_hours=0) %}
+        {% for plan in plans %}
+            {% set summary.total_days = summary.total_days + (plan[4] or 0) %}
+            {% set summary.total_hours = summary.total_hours + (plan[6] or 0) %}
+        {% endfor %}
 
-            <p>
-                <a href="{{ url_for('add_plan') }}">
-                    ➕ Create Study Plan
-                </a>
-            </p>
+        <section class="stats-grid">
+            <article class="stat-card purple">
+                <div class="stat-icon">📚</div>
+                <p>Active Plans</p>
+                <h2>{{ plans|length }}</h2>
+                <span>Subjects in your plan</span>
+            </article>
 
+            <article class="stat-card blue">
+                <div class="stat-icon">📅</div>
+                <p>Total Study Days</p>
+                <h2>{{ summary.total_days }}</h2>
+                <span>Scheduled days committed</span>
+            </article>
 
-            {% if plans %}
+            <article class="stat-card green">
+                <div class="stat-icon">⏱️</div>
+                <p>Planned Hours</p>
+                <h2>{{ "%.1f"|format(summary.total_hours) }}</h2>
+                <span>Total targeted study time</span>
+            </article>
 
-            <!-- ============================= -->
-            <!-- STUDY PLAN SUMMARY -->
-            <!-- ============================= -->
+            <article class="stat-card orange">
+                <div class="stat-icon">🎯</div>
+                <p>Avg Daily Target</p>
+                <h2>{{ "%.1f"|format(summary.total_hours / summary.total_days if summary.total_days > 0 else 0) }}</h2>
+                <span>Hours per study day</span>
+            </article>
+        </section>
 
-            {% set summary = namespace(total_days=0, total_hours=0) %}
+        <!-- SEARCH AND SORT CONTROLS -->
+        <div class="search-sort-bar">
+            <input
+                type="text"
+                id="planSearch"
+                class="search-input"
+                placeholder="🔎 Search by subject name..."
+                onkeyup="filterPlans()"
+            >
 
+            <select
+                id="prioritySort"
+                class="sort-select"
+                onchange="sortPlans()"
+            >
+                <option value="default">Default Order</option>
+                <option value="high">Highest Priority First</option>
+                <option value="low">Lowest Priority First</option>
+            </select>
+        </div>
+
+        <!-- STUDY PLAN CARDS -->
+        <div class="cards" id="plansContainer">
             {% for plan in plans %}
-                {% set summary.total_days = summary.total_days + plan[4] %}
-                {% set summary.total_hours = summary.total_hours + plan[6] %}
-            {% endfor %}
-
-
-            <div class="cards">
-
-                <div class="card">
-                    <h2>📚 Total Plans</h2>
-                    <p>
-                        <strong>{{ plans|length }}</strong>
-                    </p>
-                </div>
-
-
-                <div class="card">
-                    <h2>📅 Total Study Days</h2>
-                    <p>
-                        <strong>{{ summary.total_days }}</strong>
-                    </p>
-                </div>
-
-
-                <div class="card">
-                    <h2>⏱️ Total Planned Hours</h2>
-                    <p>
-                        <strong>{{ summary.total_hours }}</strong>
-                    </p>
-                </div>
-
-            </div>
-
-
-            <!-- ============================= -->
-            <!-- SEARCH AND SORT -->
-            <!-- ============================= -->
-
-            <div style="margin: 20px 0;">
-
-                <input
-                    type="text"
-                    id="planSearch"
-                    placeholder="🔎 Search by subject..."
-                    onkeyup="filterPlans()"
-                    style="padding: 10px; width: 100%; max-width: 400px;"
-                >
-
-
-                <select
-                    id="prioritySort"
-                    onchange="sortPlans()"
-                    style="padding: 10px; margin-left: 10px;"
-                >
-
-                    <option value="default">
-                        Sort by
-                    </option>
-
-                    <option value="high">
-                        Highest Priority
-                    </option>
-
-                    <option value="low">
-                        Lowest Priority
-                    </option>
-
-                </select>
-
-            </div>
-
-
-            <!-- ============================= -->
-            <!-- STUDY PLAN CARDS -->
-            <!-- ============================= -->
-
-            <div class="cards" id="plansContainer">
-
-                {% for plan in plans %}
-
-                <div
-                    class="card plan-card"
-                    data-priority="{{ plan[3] }}"
-                >
-
-                    <h2>
-                        📖 {{ plan[2] }}
-                    </h2>
-
-
-                    <p>
-                        ⭐ Priority:
-                        <strong>{{ plan[3] }}/5</strong>
-                    </p>
-
-
-                    <p>
-                        📅 Study Days:
-                        <strong>{{ plan[4] }}</strong>
-                    </p>
-
-
-                    <p>
-                        ⏱️ Daily Hours:
-                        <strong>{{ plan[5] }}</strong>
-                    </p>
-
-
-                    <p>
-                        🧮 Total Planned Hours:
-                        <strong>{{ plan[6] }}</strong>
-                    </p>
-
-
-                    <div style="margin-top: 15px;">
-
-                        <a href="{{ url_for('update_plan', plan_id=plan[0]) }}">
-                            ✏️ Update
-                        </a>
-
-
-                        <form
-                            action="{{ url_for('delete_plan', plan_id=plan[0]) }}"
-                            method="POST"
-                            style="display: inline;"
-                            onsubmit="return confirm('Are you sure you want to delete this study plan?');"
-                        >
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-                            <button type="submit">
-                                🗑️ Delete
-                            </button>
-
-                        </form>
-
+            <article class="plan-card" data-priority="{{ plan[3] or 0 }}">
+                <div>
+                    <div class="plan-header">
+                        <div>
+                            <h2 class="plan-title">
+                                📖 {{ plan[2] }}
+                            </h2>
+                            {% if plan[1] %}
+                            <span class="muted" style="font-size: 13px; display: inline-block; margin-top: 4px;">
+                                Student: {{ plan[1] }}
+                            </span>
+                            {% endif %}
+                        </div>
+                        <span class="plan-priority-chip">
+                            ⭐ Priority {{ plan[3] }}/5
+                        </span>
                     </div>
 
+                    <!-- META INFO GRID -->
+                    <div class="plan-meta-grid">
+                        <div class="plan-meta-col">
+                            <span>Study Days</span>
+                            <strong>{{ plan[4] }} days</strong>
+                        </div>
+                        <div class="plan-meta-col">
+                            <span>Daily Load</span>
+                            <strong>{{ plan[5] }} hrs/day</strong>
+                        </div>
+                        <div class="plan-meta-col">
+                            <span>Total Target</span>
+                            <strong>{{ plan[6] }} hrs</strong>
+                        </div>
+                    </div>
+
+                    <!-- INTENSITY INDICATOR -->
+                    {% set daily_ratio = (plan[5] / 8.0 * 100) if plan[5] <= 8 else 100 %}
+                    <div style="margin: 12px 0;">
+                        <div style="display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-secondary); margin-bottom: 5px;">
+                            <span>Daily Commitment Target</span>
+                            <span>{{ plan[5] }} hrs/day</span>
+                        </div>
+                        <div class="mini-progress">
+                            <div style="width: {{ daily_ratio }}%;"></div>
+                        </div>
+                    </div>
                 </div>
 
-                {% endfor %}
+                <!-- ACTIONS FOOTER -->
+                <div class="plan-actions-footer">
+                    <a class="button secondary" href="{{ url_for('update_plan', plan_id=plan[0]) }}" style="font-size: 13.5px; padding: 8px 14px;">
+                        ✏️ Edit Plan
+                    </a>
 
-            </div>
+                    <form
+                        action="{{ url_for('delete_plan', plan_id=plan[0]) }}"
+                        method="POST"
+                        style="display: inline; margin: 0;"
+                        onsubmit="return confirm('Are you sure you want to delete this study plan?');"
+                    >
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="button danger" style="font-size: 13.5px; padding: 8px 14px;">
+                            🗑️ Delete
+                        </button>
+                    </form>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
 
+        {% else %}
 
-            {% else %}
+        <!-- EMPTY STATE -->
+        <div class="card empty-state" style="padding: 60px 24px;">
+            <div style="font-size: 54px; margin-bottom: 14px;">📖</div>
+            <h2 style="font-size: 24px; margin-bottom: 10px;">No Study Plans Created Yet</h2>
+            <p style="font-size: 15px; color: var(--text-secondary); max-width: 520px; margin: 0 auto 24px; line-height: 1.6;">
+                Get started by mapping out your subjects, scheduling your weekly study days, and setting realistic daily study goals. A structured plan is your first step to academic success!
+            </p>
+            <a class="button primary-button" href="{{ url_for('add_plan') }}" style="padding: 13px 28px; font-size: 16px;">
+                ➕ Create Your First Study Plan
+            </a>
+        </div>
 
-            <!-- ============================= -->
-            <!-- NO PLANS -->
-            <!-- ============================= -->
-
-            <div class="card">
-
-                <h2>📖 No Study Plans Yet</h2>
-
-                <p>
-                    Create your first study plan to get started.
-                </p>
-
-                <a href="{{ url_for('add_plan') }}">
-                    ➕ Create Study Plan
-                </a>
-
-            </div>
-
-            {% endif %}
-
-        </section>
+        {% endif %}
 
     </main>
 
-
-    <!-- ============================= -->
     <!-- SEARCH AND SORT SCRIPT -->
-    <!-- ============================= -->
-
     <script>
-
         function filterPlans() {
-
-            const searchInput =
-                document.getElementById("planSearch");
-
-            const searchText =
-                searchInput.value.toLowerCase();
-
-            const plans =
-                document.querySelectorAll(".plan-card");
-
+            const searchInput = document.getElementById("planSearch");
+            const searchText = searchInput.value.toLowerCase();
+            const plans = document.querySelectorAll(".plan-card");
 
             plans.forEach(function(plan) {
-
-                const subject =
-                    plan.querySelector("h2").textContent.toLowerCase();
-
-
-                if (subject.includes(searchText)) {
-
+                const title = plan.querySelector(".plan-title").textContent.toLowerCase();
+                if (title.includes(searchText)) {
                     plan.style.display = "";
-
                 } else {
-
                     plan.style.display = "none";
-
                 }
-
             });
-
         }
-
 
         function sortPlans() {
+            const sortValue = document.getElementById("prioritySort").value;
+            const container = document.getElementById("plansContainer");
+            if (!container) return;
 
-            const sortValue =
-                document.getElementById("prioritySort").value;
-
-            const container =
-                document.getElementById("plansContainer");
-
-            const plans =
-                Array.from(
-                    container.querySelectorAll(".plan-card")
-                );
-
+            const plans = Array.from(container.querySelectorAll(".plan-card"));
 
             if (sortValue === "default") {
-
                 location.reload();
-
                 return;
-
             }
 
-
             plans.sort(function(a, b) {
-
-                const priorityA =
-                    parseInt(a.dataset.priority);
-
-                const priorityB =
-                    parseInt(b.dataset.priority);
-
+                const priorityA = parseInt(a.dataset.priority) || 0;
+                const priorityB = parseInt(b.dataset.priority) || 0;
 
                 if (sortValue === "high") {
-
                     return priorityB - priorityA;
-
                 }
-
-
                 if (sortValue === "low") {
-
                     return priorityA - priorityB;
-
                 }
-
+                return 0;
             });
-
 
             plans.forEach(function(plan) {
-
                 container.appendChild(plan);
-
             });
-
         }
-
     </script>
-
 </body>
-
 </html>

@@ -22,7 +22,7 @@
             border-radius: 16px;
             padding: 22px;
             margin-bottom: 16px;
-            border-left: 5px solid #f59e0b;
+            border: 1px solid var(--border-color); border-left: 5px solid #F59E0B; box-shadow: var(--shadow-sm);
             box-shadow: 0 5px 20px rgba(20, 24, 40, .07);
         }
 
@@ -35,7 +35,7 @@
         }
 
         .reminder-card.soon {
-            border-left-color: #eab308;
+            border-left-color: var(--primary-lavender);
         }
 
         .reminder-card h3 {
@@ -46,7 +46,9 @@
             text-align: center;
             padding: 40px 20px;
             background: white;
+            border: 1px solid var(--border-color);
             border-radius: 16px;
+            box-shadow: var(--shadow-sm);
         }
 
         .empty-state .emoji {
@@ -70,10 +72,10 @@
             <a href="{{ url_for('calendar') }}">📅 Calendar</a>
             <a class="active" href="{{ url_for('reminders') }}">🔔 Reminders</a>
         {% if is_authenticated %}
-            <span style="color: #64748b; font-weight: 600; margin-left: 10px; font-size: 0.9rem;">👤 {{ current_user }}</span>
+            <span class="user-pill">👤 {{ current_user }}</span>
             <form action="{{ url_for('logout') }}" method="POST" style="display:inline; margin: 0; padding: 0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" style="padding: 5px 10px; font-size: 0.85rem; margin-left: 6px; cursor: pointer; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-weight: 500;">Logout</button>
+                <button type="submit" class="logout-btn">Logout</button>
             </form>
         {% else %}
             <a href="{{ url_for('login') }}">🔑 Login</a>

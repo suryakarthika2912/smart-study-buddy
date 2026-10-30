@@ -435,6 +435,18 @@ def get_dashboard_data(user_id):
     cursor.execute("SELECT COUNT(*) FROM study_goals WHERE status = 'Completed' AND user_id = ?", (user_id,))
     completed_goals = cursor.fetchone()[0]
 
+    cursor.execute("""
+        SELECT
+            COUNT(CASE WHEN study_tasks.status = 'Completed' THEN 1 END),
+            COUNT(*)
+        FROM study_tasks
+        JOIN study_plans ON study_tasks.plan_id = study_plans.id
+        WHERE (study_tasks.user_id = ? OR (study_tasks.user_id IS NULL AND study_plans.user_id = ?))
+    """, (user_id, user_id))
+    task_row = cursor.fetchone()
+    completed_tasks = (task_row[0] or 0) if task_row else 0
+    total_tasks = (task_row[1] or 0) if task_row else 0
+
     recommendation = get_dashboard_recommendation(cursor, user_id)
     streak = get_study_streak(cursor, user_id)
     goals = get_goals_data(cursor, user_id)
@@ -483,6 +495,8 @@ def get_dashboard_data(user_id):
         "overall_percentage": overall_progress,
         "active_goals": active_goals,
         "completed_goals": completed_goals,
+        "completed_tasks": completed_tasks,
+        "total_tasks": total_tasks,
         "subjects": subjects,
         "goals": goals,
         "recommendation": recommendation,
@@ -597,7 +611,9 @@ def index():
         active_goals=data["active_goals"],
         completed_goals=data["completed_goals"],
         recommendation=data["recommendation"],
-        streak=data["current_streak"]
+        streak=data["current_streak"],
+        completed_tasks=data["completed_tasks"],
+        total_tasks=data["total_tasks"]
     )
 
 
@@ -1103,11 +1119,36 @@ def analytics():
     most_completed = max(subjects, key=lambda s: s["completed"], default=None)
     most_remaining = max(subjects, key=lambda s: s["remaining"], default=None)
 
+    cursor.execute("""
+        SELECT
+            COUNT(CASE WHEN study_tasks.status = 'Completed' THEN 1 END),
+            COUNT(*)
+        FROM study_tasks
+        JOIN study_plans ON study_tasks.plan_id = study_plans.id
+        WHERE (study_tasks.user_id = ? OR (study_tasks.user_id IS NULL AND study_plans.user_id = ?))
+    """, (user_id, user_id))
+    task_row = cursor.fetchone()
+    completed_tasks = (task_row[0] or 0) if task_row else 0
+    total_tasks = (task_row[1] or 0) if task_row else 0
+
+    cursor.execute("SELECT COUNT(*) FROM study_goals WHERE status != 'Completed' AND user_id = ?", (user_id,))
+    active_goals = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM study_goals WHERE status = 'Completed' AND user_id = ?", (user_id,))
+    completed_goals = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM study_plans WHERE user_id = ?", (user_id,))
+    total_plans = cursor.fetchone()[0]
+
     conn.close()
 
     return render_template(
         "analytics.html",
         subjects=subjects,
+        completed_tasks=completed_tasks,
+        total_tasks=total_tasks,
+        active_goals=active_goals,
+        completed_goals=completed_goals,
+        total_plans=total_plans,
         total_planned=total_planned,
         total_completed=total_completed,
         total_remaining=total_remaining,

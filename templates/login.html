@@ -7,15 +7,16 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
         .auth-container {
-            max-width: 480px;
+            max-width: 460px;
             margin: 60px auto;
             padding: 20px;
         }
         .auth-card {
-            background: white;
-            padding: 35px;
-            border-radius: 18px;
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+            background: #FFFFFF;
+            padding: 40px 36px;
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-lg);
         }
         .form-group {
             margin-bottom: 20px;
@@ -24,65 +25,72 @@
             display: block;
             margin-bottom: 8px;
             font-weight: 600;
-            color: #374151;
+            color: var(--text-main);
+            font-size: 14px;
         }
         .form-group input {
             width: 100%;
             padding: 12px 14px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
+            border: 1.5px solid var(--border-color);
+            border-radius: var(--radius-md);
             font-size: 1rem;
             box-sizing: border-box;
+            transition: all var(--transition-fast);
         }
         .form-group input:focus {
             outline: none;
-            border-color: #4f46e5;
-            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+            border-color: var(--primary-lavender);
+            box-shadow: 0 0 0 3px rgba(139, 123, 232, 0.18);
         }
         .auth-btn {
             width: 100%;
-            background: #4f46e5;
-            color: white;
+            background: var(--primary-lavender);
+            color: #FFFFFF;
             border: none;
             padding: 14px;
             font-size: 1rem;
-            font-weight: 600;
-            border-radius: 8px;
+            font-weight: 700;
+            border-radius: var(--radius-md);
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all var(--transition-normal);
+            box-shadow: 0 4px 14px rgba(139, 123, 232, 0.28);
+            margin-top: 6px;
         }
         .auth-btn:hover {
-            background: #4338ca;
+            background: var(--hover-lavender);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(117, 101, 216, 0.38);
         }
         .auth-footer {
-            margin-top: 24px;
+            margin-top: 26px;
             text-align: center;
-            color: #6b7280;
+            color: var(--text-secondary);
             font-size: 0.95rem;
         }
         .auth-footer a {
-            color: #4f46e5;
+            color: var(--primary-lavender);
             text-decoration: none;
-            font-weight: 600;
+            font-weight: 700;
         }
         .auth-footer a:hover {
             text-decoration: underline;
+            color: var(--hover-lavender);
         }
         .alert-error {
-            background: #fef2f2;
-            color: #b91c1c;
-            border: 1px solid #f87171;
+            background: #FEF2F2;
+            color: #991B1B;
+            border: 1px solid #FECACA;
             padding: 12px 16px;
-            border-radius: 8px;
+            border-radius: var(--radius-md);
             margin-bottom: 20px;
             font-size: 0.95rem;
         }
         .alert-success {
-            background: #f0fdf4;
-            color: #15803d;
-            border: 1px solid #86efac;
+            background: #F0FDF4;
+            color: #15803D;
+            border: 1px solid #BBF7D0;
             padding: 12px 16px;
-            border-radius: 8px;
+            border-radius: var(--radius-md);
             margin-bottom: 20px;
             font-size: 0.95rem;
         }
@@ -99,8 +107,8 @@
 
     <div class="auth-container">
         <div class="auth-card">
-            <h2 style="margin-top: 0; color: #1e293b; text-align: center;">Welcome Back</h2>
-            <p style="text-align: center; color: #64748b; margin-bottom: 28px;">Sign in to access your personal study space</p>
+            <h2 style="margin-top: 0; color: var(--text-main); text-align: center; font-size: 26px;">Welcome Back 👋</h2>
+            <p style="text-align: center; color: var(--text-secondary); margin-bottom: 28px; font-size: 14.5px;">Sign in to access your personal study dashboard</p>
 
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
@@ -119,22 +127,21 @@
 
                 <div class="form-group">
                     <label for="username">Username</label>
-                    <input type="text" id="username" name="username" required autofocus autocomplete="username" value="{{ request.form.get('username', '') }}">
+                    <input type="text" id="username" name="username" required autofocus autocomplete="username" value="{{ request.form.get('username', '') }}" placeholder="Enter your username">
                 </div>
 
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input type="password" id="password" name="password" required autocomplete="current-password">
+                    <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="Enter your password">
                 </div>
 
-                <button type="submit" class="auth-btn">Sign In</button>
+                <button type="submit" class="auth-btn">Sign In to Dashboard</button>
             </form>
 
             <div class="auth-footer">
-                Don't have an account yet? <a href="{{ url_for('register') }}">Create one</a>
+                Don't have an account yet? <a href="{{ url_for('register') }}">Create one here</a>
             </div>
         </div>
     </div>
 </body>
 </html>
-

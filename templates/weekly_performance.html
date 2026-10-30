@@ -33,10 +33,10 @@
             <a href="{{ url_for('calendar') }}">📅 Calendar</a>
             <a href="{{ url_for('reminders') }}">🔔 Reminders</a>
         {% if is_authenticated %}
-            <span style="color: #64748b; font-weight: 600; margin-left: 10px; font-size: 0.9rem;">👤 {{ current_user }}</span>
+            <span class="user-pill">👤 {{ current_user }}</span>
             <form action="{{ url_for('logout') }}" method="POST" style="display:inline; margin: 0; padding: 0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" style="padding: 5px 10px; font-size: 0.85rem; margin-left: 6px; cursor: pointer; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-weight: 500;">Logout</button>
+                <button type="submit" class="logout-btn">Logout</button>
             </form>
         {% else %}
             <a href="{{ url_for('login') }}">🔑 Login</a>
@@ -350,8 +350,7 @@
 
         background: #ffffff;
 
-        box-shadow:
-            0 4px 15px rgba(0, 0, 0, 0.08);
+        border: 1px solid var(--border-color); box-shadow: var(--shadow-sm);
 
         text-align: center;
 
@@ -396,8 +395,7 @@
 
         border-radius: 15px;
 
-        box-shadow:
-            0 4px 15px rgba(0, 0, 0, 0.08);
+        border: 1px solid var(--border-color); box-shadow: var(--shadow-sm);
 
     }
 
@@ -440,7 +438,7 @@
 
         min-height: 3px;
 
-        background: #6c63ff;
+        background: linear-gradient(180deg, var(--primary-lavender), var(--hover-lavender));
 
         border-radius: 8px 8px 0 0;
 
@@ -490,8 +488,7 @@
 
         overflow: hidden;
 
-        box-shadow:
-            0 4px 15px rgba(0, 0, 0, 0.08);
+        border: 1px solid var(--border-color); box-shadow: var(--shadow-sm);
 
     }
 
@@ -555,8 +552,7 @@
 
         background: #ffffff;
 
-        box-shadow:
-            0 4px 15px rgba(0, 0, 0, 0.08);
+        border: 1px solid var(--border-color); box-shadow: var(--shadow-sm);
 
         text-align: center;
 
