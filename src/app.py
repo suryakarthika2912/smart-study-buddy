@@ -36,6 +36,12 @@ app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SESSION_COOKIE_SECURE", de
 
 csrf = CSRFProtect(app)
 DATABASE = get_database_uri()
+if is_production and not is_postgres_uri(DATABASE):
+    import logging
+    logging.getLogger("app").warning(
+        "Production environment detected (VERCEL/RENDER) but no PostgreSQL URI (DATABASE_URL/POSTGRES_URL) is set. "
+        "SQLite cannot persist data on a read-only serverless filesystem."
+    )
 
 
 # ============================================================
@@ -422,93 +428,95 @@ def get_subject_data(cursor, user_id):
 
 def get_dashboard_data(user_id):
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    subjects = get_subject_data(cursor, user_id)
-    total_subjects = len(subjects)
-    planned_hours = sum(item["planned"] for item in subjects)
-    completed_hours = sum(item["completed"] for item in subjects)
-    overall_progress = safe_percentage(completed_hours, planned_hours)
+        subjects = get_subject_data(cursor, user_id)
+        total_subjects = len(subjects)
+        planned_hours = sum(item["planned"] for item in subjects)
+        completed_hours = sum(item["completed"] for item in subjects)
+        overall_progress = safe_percentage(completed_hours, planned_hours)
 
-    cursor.execute("SELECT COUNT(*) FROM study_goals WHERE status != 'Completed' AND user_id = ?", (user_id,))
-    active_goals = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM study_goals WHERE status = 'Completed' AND user_id = ?", (user_id,))
-    completed_goals = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM study_goals WHERE status != 'Completed' AND user_id = ?", (user_id,))
+        active_goals = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM study_goals WHERE status = 'Completed' AND user_id = ?", (user_id,))
+        completed_goals = cursor.fetchone()[0]
 
-    cursor.execute("""
-        SELECT
-            COUNT(CASE WHEN study_tasks.status = 'Completed' THEN 1 END),
-            COUNT(*)
-        FROM study_tasks
-        JOIN study_plans ON study_tasks.plan_id = study_plans.id
-        WHERE (study_tasks.user_id = ? OR (study_tasks.user_id IS NULL AND study_plans.user_id = ?))
-    """, (user_id, user_id))
-    task_row = cursor.fetchone()
-    completed_tasks = (task_row[0] or 0) if task_row else 0
-    total_tasks = (task_row[1] or 0) if task_row else 0
+        cursor.execute("""
+            SELECT
+                COUNT(CASE WHEN study_tasks.status = 'Completed' THEN 1 END),
+                COUNT(*)
+            FROM study_tasks
+            JOIN study_plans ON study_tasks.plan_id = study_plans.id
+            WHERE (study_tasks.user_id = ? OR (study_tasks.user_id IS NULL AND study_plans.user_id = ?))
+        """, (user_id, user_id))
+        task_row = cursor.fetchone()
+        completed_tasks = (task_row[0] or 0) if task_row else 0
+        total_tasks = (task_row[1] or 0) if task_row else 0
 
-    recommendation = get_dashboard_recommendation(cursor, user_id)
-    streak = get_study_streak(cursor, user_id)
-    goals = get_goals_data(cursor, user_id)
+        recommendation = get_dashboard_recommendation(cursor, user_id)
+        streak = get_study_streak(cursor, user_id)
+        goals = get_goals_data(cursor, user_id)
 
-    cursor.execute("""
-        SELECT subject, priority FROM study_plans
-        WHERE user_id = ?
-        ORDER BY priority DESC, id DESC LIMIT 1
-    """, (user_id,))
-    priority_row = cursor.fetchone()
-    recommendation_subject = priority_row[0] if priority_row else ""
-    recommendation_priority = (priority_row[1] or 0) if priority_row else 0
+        cursor.execute("""
+            SELECT subject, priority FROM study_plans
+            WHERE user_id = ?
+            ORDER BY priority DESC, id DESC LIMIT 1
+        """, (user_id,))
+        priority_row = cursor.fetchone()
+        recommendation_subject = priority_row[0] if priority_row else ""
+        recommendation_priority = (priority_row[1] or 0) if priority_row else 0
 
-    today = date.today().isoformat()
-    cursor.execute("""
-        SELECT SUM(completed_hours) FROM study_progress
-        WHERE DATE(added_at) = ? AND user_id = ?
-    """, (today, user_id))
-    today_hours = cursor.fetchone()[0] or 0
+        today = date.today().isoformat()
+        cursor.execute("""
+            SELECT SUM(completed_hours) FROM study_progress
+            WHERE DATE(added_at) = ? AND user_id = ?
+        """, (today, user_id))
+        today_hours = cursor.fetchone()[0] or 0
 
-    cursor.execute("""
-        SELECT subject, completed_hours, added_at
-        FROM study_progress
-        WHERE user_id = ?
-        ORDER BY id DESC LIMIT 5
-    """, (user_id,))
-    recent_progress = [
-        {"subject": row[0], "hours": row[1] or 0, "added_at": row[2]}
-        for row in cursor.fetchall()
-    ]
+        cursor.execute("""
+            SELECT subject, completed_hours, added_at
+            FROM study_progress
+            WHERE user_id = ?
+            ORDER BY id DESC LIMIT 5
+        """, (user_id,))
+        recent_progress = [
+            {"subject": row[0], "hours": row[1] or 0, "added_at": row[2]}
+            for row in cursor.fetchall()
+        ]
 
-    upcoming = [
-        goal for goal in goals
-        if goal["status"] != "Completed"
-        and goal["days_left"] is not None
-        and goal["days_left"] >= 0
-    ]
-    nearest_deadline = min(upcoming, key=lambda item: item["days_left"]) if upcoming else None
+        upcoming = [
+            goal for goal in goals
+            if goal["status"] != "Completed"
+            and goal["days_left"] is not None
+            and goal["days_left"] >= 0
+        ]
+        nearest_deadline = min(upcoming, key=lambda item: item["days_left"]) if upcoming else None
 
-    conn.close()
-    return {
-        "total_subjects": total_subjects,
-        "planned_hours": planned_hours,
-        "completed_hours": completed_hours,
-        "overall_progress": overall_progress,
-        "overall_percentage": overall_progress,
-        "active_goals": active_goals,
-        "completed_goals": completed_goals,
-        "completed_tasks": completed_tasks,
-        "total_tasks": total_tasks,
-        "subjects": subjects,
-        "goals": goals,
-        "recommendation": recommendation,
-        "recommendation_subject": recommendation_subject,
-        "recommendation_priority": recommendation_priority,
-        "current_streak": streak["current"],
-        "longest_streak": streak["longest"],
-        "total_study_days": streak["total_days"],
-        "today_hours": today_hours,
-        "recent_progress": recent_progress,
-        "nearest_deadline": nearest_deadline
-    }
+        return {
+            "total_subjects": total_subjects,
+            "planned_hours": planned_hours,
+            "completed_hours": completed_hours,
+            "overall_progress": overall_progress,
+            "overall_percentage": overall_progress,
+            "active_goals": active_goals,
+            "completed_goals": completed_goals,
+            "completed_tasks": completed_tasks,
+            "total_tasks": total_tasks,
+            "subjects": subjects,
+            "goals": goals,
+            "recommendation": recommendation,
+            "recommendation_subject": recommendation_subject,
+            "recommendation_priority": recommendation_priority,
+            "current_streak": streak["current"],
+            "longest_streak": streak["longest"],
+            "total_study_days": streak["total_days"],
+            "today_hours": today_hours,
+            "recent_progress": recent_progress,
+            "nearest_deadline": nearest_deadline
+        }
+    finally:
+        conn.close()
 
 
 # ============================================================
@@ -535,22 +543,28 @@ def register():
         elif password != confirm_password:
             error = "Passwords do not match."
         else:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(?)", (username,))
-            if cursor.fetchone():
-                error = "Username is already taken. Please choose another."
-                conn.close()
-            else:
-                pw_hash = generate_password_hash(password)
-                cursor.execute(
-                    "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-                    (username, pw_hash)
-                )
-                conn.commit()
-                conn.close()
-                flash("Account created successfully! Please sign in.", "success")
-                return redirect(url_for("login"))
+            conn = None
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(?)", (username,))
+                if cursor.fetchone():
+                    error = "Username is already taken. Please choose another."
+                else:
+                    pw_hash = generate_password_hash(password)
+                    cursor.execute(
+                        "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+                        (username, pw_hash)
+                    )
+                    conn.commit()
+                    flash("Account created successfully! Please sign in.", "success")
+                    return redirect(url_for("login"))
+            except Exception as ex:
+                app.logger.error(f"Database error during registration: {ex}", exc_info=True)
+                error = "Database service error. Please verify database initialization and try again."
+            finally:
+                if conn is not None:
+                    conn.close()
 
     return render_template("register.html", error=error)
 
@@ -565,23 +579,30 @@ def login():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, username, password_hash FROM users WHERE LOWER(username) = LOWER(?)", (username,))
-        user = cursor.fetchone()
-        conn.close()
+        conn = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, username, password_hash FROM users WHERE LOWER(username) = LOWER(?)", (username,))
+            user = cursor.fetchone()
 
-        if user and check_password_hash(user["password_hash"], password):
-            session.clear()
-            session["user_id"] = user["id"]
-            session["username"] = user["username"]
+            if user and check_password_hash(user["password_hash"], password):
+                session.clear()
+                session["user_id"] = user["id"]
+                session["username"] = user["username"]
 
-            next_url = request.args.get("next")
-            if next_url and is_safe_url(next_url):
-                return redirect(next_url)
-            return redirect(url_for("index"))
-        else:
-            error = "Invalid username or password."
+                next_url = request.args.get("next")
+                if next_url and is_safe_url(next_url):
+                    return redirect(next_url)
+                return redirect(url_for("index"))
+            else:
+                error = "Invalid username or password."
+        except Exception as ex:
+            app.logger.error(f"Database error during login: {ex}", exc_info=True)
+            error = "Database service error. Please verify database initialization and try again."
+        finally:
+            if conn is not None:
+                conn.close()
 
     return render_template("login.html", error=error)
 
@@ -626,24 +647,26 @@ def index():
 def plans():
     user_id = session["user_id"]
     conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT
-            id,
-            name,
-            subject,
-            priority,
-            days,
-            daily_hours,
-            COALESCE(days, 0) * COALESCE(daily_hours, 0) AS total_hours
-        FROM study_plans
-        WHERE user_id = ?
-        ORDER BY id DESC
-    """, (user_id,))
+        cursor.execute("""
+            SELECT
+                id,
+                name,
+                subject,
+                priority,
+                days,
+                daily_hours,
+                COALESCE(days, 0) * COALESCE(daily_hours, 0) AS total_hours
+            FROM study_plans
+            WHERE user_id = ?
+            ORDER BY id DESC
+        """, (user_id,))
 
-    plans_data = cursor.fetchall()
-    conn.close()
+        plans_data = cursor.fetchall()
+    finally:
+        conn.close()
 
     return render_template("plans.html", plans=plans_data)
 

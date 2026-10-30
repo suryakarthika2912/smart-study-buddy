@@ -18,3 +18,6 @@ study_buddy*.db
 # Operating System files
 .DS_Store
 Thumbs.db
+
+.vercel
+.env*

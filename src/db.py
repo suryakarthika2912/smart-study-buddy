@@ -13,10 +13,23 @@ except ImportError:
 _pg_pool = None
 
 def get_database_uri():
-    return os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL") or os.environ.get("DATABASE_PATH") or "study_buddy.db"
+    raw_uri = (
+        os.environ.get("DATABASE_URL")
+        or os.environ.get("POSTGRES_URL")
+        or os.environ.get("POSTGRES_URL_NON_POOLING")
+        or os.environ.get("POSTGRES_PRISMA_URL")
+        or os.environ.get("DATABASE_PATH")
+        or "study_buddy.db"
+    )
+    if isinstance(raw_uri, str):
+        raw_uri = raw_uri.strip().strip("'\"")
+    return raw_uri
 
 def is_postgres_uri(uri):
-    return uri.startswith("postgres://") or uri.startswith("postgresql://")
+    if not uri or not isinstance(uri, str):
+        return False
+    cleaned = uri.strip().strip("'\"")
+    return cleaned.startswith("postgres://") or cleaned.startswith("postgresql://")
 
 def get_pg_pool(dsn):
     global _pg_pool
@@ -278,6 +291,13 @@ def get_db_connection(database_uri=None):
         try:
             pool = get_pg_pool(uri)
             raw_conn = pool.getconn()
+            if getattr(raw_conn, "closed", 0) != 0:
+                try:
+                    pool.putconn(raw_conn, close=True)
+                except Exception:
+                    pass
+                raw_conn = psycopg2.connect(uri)
+                return DBConnectionWrapper(raw_conn, is_postgres=True, from_pool=False)
             return DBConnectionWrapper(raw_conn, is_postgres=True, from_pool=True)
         except Exception:
             # Fall back to direct connection if pooling fails or pool is exhausted
