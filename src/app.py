@@ -54,7 +54,9 @@ def setup_database():
 
 
 # Protect database from unapproved automatic schema modification on serverless cold starts
-if os.environ.get("AUTO_SETUP_DB") == "1" or os.environ.get("ALLOW_DEFAULT_DB_SETUP") == "1":
+if (os.environ.get("AUTO_SETUP_DB") == "1"
+        or os.environ.get("ALLOW_DEFAULT_DB_SETUP") == "1"
+        or is_production):
     setup_database()
 
 
